@@ -48,6 +48,9 @@ class Trigger(enum.StrEnum):
 
     START = "start"
     DWELL = "dwell"
+    REFRESH = "refresh"
+    """A self-refreshing item rewriting itself in place, mid-dwell."""
+
     ITEMS_CHANGED = "items_changed"
     MANUAL = "manual"
     FOREIGN_WRITE = "foreign_write"
@@ -159,6 +162,14 @@ class Item:
     created: datetime | None = None
     expires: datetime | None = None
     dwell: timedelta | None = None
+    refresh: timedelta | None = None
+    """How often this item's text should be rebuilt while it is on the board.
+
+    For an item whose text is a function of the clock. The scheduler brings
+    the next wake forward to match, and holds the original dwell deadline -
+    refreshing rewrites the card, it does not win more board time.
+    """
+
     meta: dict[str, str] = field(default_factory=dict, compare=False)
 
     def __post_init__(self) -> None:
@@ -223,6 +234,8 @@ class Decision:
     next_wake: datetime | None = None
     attention_count: int = 0
     reason: str = ""
+    wake_trigger: Trigger = Trigger.DWELL
+    """Why the scheduler wants to be woken at ``next_wake``."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -31,9 +31,13 @@ from .const import (
     ATTR_TTL,
     CONF_API_KEY,
     CONF_BLEND,
+    CONF_CLOCK,
+    CONF_CLOCK_REFRESH,
     CONF_DWELL,
     CONF_ENTITY_ID,
     CONF_ENTRIES,
+    CONF_FORECAST,
+    CONF_FORECAST_ENTITY,
     CONF_HOST,
     CONF_QUIET_END,
     CONF_QUIET_START,
@@ -44,6 +48,7 @@ from .const import (
     CONF_TOKEN,
     CONF_TRANSPORT,
     DEFAULT_BLEND,
+    DEFAULT_CLOCK_REFRESH,
     DEFAULT_DWELL_MINUTES,
     DEFAULT_SUMMARY_TEMPLATE,
     DEFAULT_SUMMARY_THRESHOLD,
@@ -63,6 +68,7 @@ from .core.layout import NOTE, Geometry, fit
 from .core.models import TIER_CONTENT, SchedulerConfig, TierSet, Trigger
 from .sources.base import ListSource
 from .sources.dynamic import DeclaredSource, ServiceSource, TodoSource
+from .sources.generated import ClockSource, ForecastSource
 from .transport.base import VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
@@ -115,8 +121,11 @@ async def async_setup_entry(
         hass, entry, transport, _scheduler_config(entry)
     )
 
-    # The service source is always present; the rest come from subentries.
+    # The service source is always present; the built-in cards come from the
+    # entry's options, and everything else from subentries.
     coordinator.register_source(ServiceSource(hass))
+    for source in _generated_sources(hass, entry):
+        coordinator.register_source(source)
     for subentry in entry.subentries.values():
         source = _source_from_subentry(hass, subentry)
         if source is not None:
@@ -137,6 +146,25 @@ async def async_setup_entry(
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     _async_register_services(hass)
     return True
+
+
+def _generated_sources(hass: HomeAssistant, entry: ConfigEntry) -> list:
+    """The clock and forecast cards, if their switches are on.
+
+    Built from options rather than subentries so that turning one off leaves
+    its settings behind, ready for when it goes back on.
+    """
+    options = entry.options
+    out: list = []
+    if options.get(CONF_CLOCK):
+        minutes = options.get(CONF_CLOCK_REFRESH, DEFAULT_CLOCK_REFRESH)
+        out.append(ClockSource(hass, refresh=timedelta(minutes=int(minutes))))
+    # An entity is required rather than assumed: there is no sensible default
+    # weather entity, and guessing one would put somebody else's city on the
+    # wall.
+    if options.get(CONF_FORECAST) and (entity := options.get(CONF_FORECAST_ENTITY)):
+        out.append(ForecastSource(hass, entity_id=entity))
+    return out
 
 
 def _source_from_subentry(hass: HomeAssistant, subentry) -> object | None:

@@ -46,6 +46,23 @@ doesn't. Once enough things are pending it heads each pass with a count —
   attribute. The message lives next to the detector that raises it, in YAML
   you can diff, and it adds and removes itself with no automation at all.
 - **Service calls** — `vestassistant.add_item` / `remove_item`.
+- **Clock** and **Forecast** — built in. These two are switches in the
+  integration's options rather than sources you add, because there is only
+  ever one of each and nothing to name: turn one off and its settings wait
+  there for when you turn it back on. Both are content, so they never
+  interrupt and they observe quiet hours.
+
+The clock is the only card that rewrites itself. A split-flap that says
+`11:00 PM` at twenty past is worse than one that says nothing, so while it is
+up it is rebuilt every few minutes — and it still surrenders the board when
+its dwell runs out, rather than renewing its own lease by refreshing. Every
+rewrite is a physical flip, so the interval is yours to set and defaults to
+five minutes.
+
+If you run Vestaboard+ scheduled channels, turn them off before switching
+these on. A channel posting the time on the hour reads as somebody writing to
+the board by hand, which makes Vestassistant yield for thirty minutes — so
+the two clocks would take it in turns rather than cooperate.
 
 ### Items that clean up after themselves
 

@@ -219,6 +219,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         self.decision = decision
 
         wake = decision.next_wake
+        wake_trigger = decision.wake_trigger
         if decision.write:
             outcome = await self._async_render(decision, now)
             if outcome is not WriteOutcome.WRITTEN:
@@ -230,8 +231,12 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 # avoid.
                 self.cursor = self.cursor.with_(last_rendered=previously_rendered)
                 wake = self._retry_at(now, outcome)
+                # A retry is an ordinary tick, not a refresh: re-attempting a
+                # write that failed should not also hold the board for an item
+                # that may be what the board is unhappy about.
+                wake_trigger = Trigger.DWELL
 
-        self._schedule_wake(wake)
+        self._schedule_wake(wake, wake_trigger)
         self.async_update_listeners()
         await self._async_save()
 

@@ -218,7 +218,23 @@ def decide(
     new_state = state.with_(frozen=False)
     reason = ""
 
-    # 6. Preemption. An arriving item takes the board if it ranks at least as
+    # 6. A self-refreshing item rewriting itself in place. Holding is the
+    #    point: the clock rebuilding its own card must not renew its lease on
+    #    the board, or an item that refreshes would never rotate away.
+    if trigger is Trigger.REFRESH and current is not None:
+        return _render(
+            current,
+            state.current_card,
+            new_state.with_(known_keys=tuple(by_key)),
+            now=now,
+            config=config,
+            tiers=tiers,
+            attention_count=attention_count,
+            reason="refreshed the current item",
+            hold=True,
+        )
+
+    # 7. Preemption. An arriving item takes the board if it ranks at least as
     #    high as whatever is currently up.
     if trigger is Trigger.ITEMS_CHANGED:
         current_rank = tiers.get(current.tier).rank if current else -1
@@ -247,7 +263,7 @@ def decide(
                 hold=True,
             )
 
-    # 7. Multi-card items play to the end before anything else gets a turn.
+    # 8. Multi-card items play to the end before anything else gets a turn.
     if (
         chosen is None
         and current is not None
@@ -258,13 +274,13 @@ def decide(
         card = state.current_card + 1
         reason = "next card of the current item"
 
-    # 8. Coming back from a restart, resume rather than jump.
+    # 9. Coming back from a restart, resume rather than jump.
     if chosen is None and trigger is Trigger.START and current is not None:
         chosen = current
         card = min(state.current_card, len(current.cards) - 1)
         reason = "resumed after restart"
 
-    # 9. Otherwise advance through the blend.
+    # 10. Otherwise advance through the blend.
     if chosen is None:
         blend = BLENDS.get(config.blend, _blend_alternate)
         take_attention = blend(attention, content, state)
@@ -342,6 +358,13 @@ def _render(
     unchanged = text == state.last_rendered
     # Holding keeps the original deadline rather than pushing it out.
     deadline = (state.shown_at or now) + dwell if hold else now + dwell
+
+    # An item whose text is a function of the clock needs waking sooner than
+    # its dwell, but only until the dwell runs out - whichever comes first.
+    wake, wake_trigger = deadline, Trigger.DWELL
+    if item.refresh is not None and now + item.refresh < deadline:
+        wake, wake_trigger = now + item.refresh, Trigger.REFRESH
+
     return Decision(
         state=state.with_(
             current_key=item.key,
@@ -356,9 +379,10 @@ def _render(
         # Re-posting text the board already shows costs a physical flip and
         # fifteen seconds of rate limit for no information.
         write=not unchanged,
-        next_wake=deadline,
+        next_wake=wake,
         attention_count=attention_count,
         reason=reason,
+        wake_trigger=wake_trigger,
     )
 
 

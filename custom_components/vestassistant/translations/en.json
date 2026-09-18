@@ -43,14 +43,22 @@
           "summary_template": "Summary card text",
           "quiet_start": "Quiet hours start",
           "quiet_end": "Quiet hours end",
-          "blend": "How attention and content share the board"
+          "blend": "How attention and content share the board",
+        "clock_enabled": "Include a clock",
+        "clock_refresh_minutes": "Clock rewrite interval",
+        "forecast_enabled": "Include a forecast",
+        "forecast_entity": "Weather entity"
         },
         "data_description": {
           "dwell_minutes": "How long each message stays up before the board advances.",
           "summary_threshold": "Show a count card once this many things need attention. Zero disables it.",
           "summary_template": "Use {n} for the count.",
           "quiet_start": "Only tiers set to ignore quiet hours will post inside this window.",
-          "blend": "Alternate shows one thing that needs you, then one that does not. Attention first runs content only when nothing is pending."
+          "blend": "Alternate shows one thing that needs you, then one that does not. Attention first runs content only when nothing is pending.",
+        "clock_enabled": "Adds the day, date and time to the rotation as a content card.",
+        "clock_refresh_minutes": "How often the clock card is rewritten while it is on the board. Every rewrite is a physical flip, so shorter is not free. The card never outstays its dwell, however often it refreshes.",
+        "forecast_enabled": "Adds temperature and conditions to the rotation as a content card - today's during the day, tonight's from 5pm.",
+        "forecast_entity": "Which weather entity to read the forecast from."
         }
       }
     }

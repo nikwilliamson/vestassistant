@@ -25,10 +25,14 @@ import voluptuous as vol
 from .const import (
     CONF_API_KEY,
     CONF_BLEND,
+    CONF_CLOCK,
+    CONF_CLOCK_REFRESH,
     CONF_DWELL,
     CONF_ENABLEMENT_TOKEN,
     CONF_ENTITY_ID,
     CONF_ENTRIES,
+    CONF_FORECAST,
+    CONF_FORECAST_ENTITY,
     CONF_HOST,
     CONF_QUIET_END,
     CONF_QUIET_START,
@@ -39,6 +43,7 @@ from .const import (
     CONF_TOKEN,
     CONF_TRANSPORT,
     DEFAULT_BLEND,
+    DEFAULT_CLOCK_REFRESH,
     DEFAULT_DWELL_MINUTES,
     DEFAULT_SUMMARY_TEMPLATE,
     DEFAULT_SUMMARY_THRESHOLD,
@@ -207,11 +212,14 @@ def _default_options() -> dict[str, Any]:
         CONF_SUMMARY_THRESHOLD: DEFAULT_SUMMARY_THRESHOLD,
         CONF_SUMMARY_TEMPLATE: DEFAULT_SUMMARY_TEMPLATE,
         CONF_BLEND: DEFAULT_BLEND,
+        CONF_CLOCK: False,
+        CONF_CLOCK_REFRESH: DEFAULT_CLOCK_REFRESH,
+        CONF_FORECAST: False,
     }
 
 
 class VestassistantOptionsFlow(OptionsFlow):
-    """Dwell, quiet hours, summary and blend."""
+    """Dwell, quiet hours, summary, blend, and the built-in cards."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -264,6 +272,31 @@ class VestassistantOptionsFlow(OptionsFlow):
                             translation_key="blend",
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
+                    ),
+                    vol.Required(
+                        CONF_CLOCK, default=options.get(CONF_CLOCK, False)
+                    ): selector.BooleanSelector(),
+                    vol.Required(
+                        CONF_CLOCK_REFRESH,
+                        default=options.get(CONF_CLOCK_REFRESH, DEFAULT_CLOCK_REFRESH),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1, max=60, step=1, unit_of_measurement="min"
+                        )
+                    ),
+                    vol.Required(
+                        CONF_FORECAST, default=options.get(CONF_FORECAST, False)
+                    ): selector.BooleanSelector(),
+                    # Optional because the switch above may be off. Turning
+                    # the forecast on without naming an entity simply
+                    # contributes nothing, rather than failing setup.
+                    vol.Optional(
+                        CONF_FORECAST_ENTITY,
+                        description={
+                            "suggested_value": options.get(CONF_FORECAST_ENTITY)
+                        },
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="weather")
                     ),
                 }
             ),

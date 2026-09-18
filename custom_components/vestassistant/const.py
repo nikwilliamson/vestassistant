@@ -25,6 +25,11 @@ CONF_BLEND: Final = "blend"
 CONF_ALIGN: Final = "align"
 CONF_VALIGN: Final = "valign"
 
+CONF_CLOCK: Final = "clock_enabled"
+CONF_CLOCK_REFRESH: Final = "clock_refresh_minutes"
+CONF_FORECAST: Final = "forecast_enabled"
+CONF_FORECAST_ENTITY: Final = "forecast_entity"
+
 CONF_SOURCE_TYPE: Final = "source_type"
 CONF_ENTRIES: Final = "entries"
 CONF_TIER: Final = "tier"
@@ -39,6 +44,10 @@ DEFAULT_DWELL_MINUTES: Final = 20
 DEFAULT_SUMMARY_THRESHOLD: Final = 3
 DEFAULT_SUMMARY_TEMPLATE: Final = "YOU HAVE {n} THINGS THAT NEED YOU."
 DEFAULT_BLEND: Final = "alternate"
+
+#: Minutes between rewrites of the clock card while it is on the board. Every
+#: rewrite is a physical flip, so this is deliberately not one minute.
+DEFAULT_CLOCK_REFRESH: Final = 5
 
 #: How often the board is read back, to notice somebody posting from the
 #: Vestaboard app and to keep the preview image honest.

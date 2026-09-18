@@ -433,3 +433,87 @@ def test_summary_threshold_of_zero_disables_it():
     items = [item(f"t{n}", tier=TIER_TASK) for n in range(4)]
     d = run(items, config=cfg(summary_threshold=0))
     assert d.item.id != SUMMARY_ID
+
+
+# --------------------------------------------------------------------------
+# self-refreshing items (the clock)
+# --------------------------------------------------------------------------
+
+FIVE = timedelta(minutes=5)
+
+
+def clock(text="11:00 PM"):
+    return item("now", source="clock", cards=[text], refresh=FIVE)
+
+
+def test_refresh_interval_brings_the_wake_forward():
+    d = run([clock()])
+    assert d.next_wake == NOW + FIVE
+    assert d.wake_trigger is Trigger.REFRESH
+
+
+def test_an_item_without_a_refresh_wakes_on_dwell_as_before():
+    d = run([item("a")])
+    assert d.next_wake == NOW + timedelta(minutes=20)
+    assert d.wake_trigger is Trigger.DWELL
+
+
+def test_dwell_wins_when_it_lands_before_the_next_refresh():
+    d = run([item("a", dwell=timedelta(minutes=2), refresh=FIVE)])
+    assert d.next_wake == NOW + timedelta(minutes=2)
+    assert d.wake_trigger is Trigger.DWELL
+
+
+def test_refresh_rewrites_the_current_item_with_its_new_text():
+    first = run([clock("11:00 PM")])
+    d = run(
+        [clock("11:05 PM")],
+        state=first.state,
+        trigger=Trigger.REFRESH,
+        now=NOW + FIVE,
+    )
+    assert d.write is True
+    assert d.text == "11:05 PM"
+    assert d.state.current_key == first.state.current_key
+
+
+def test_refresh_does_not_extend_the_items_dwell():
+    """A clock that rewrites itself must not renew its own lease."""
+    first = run([clock("11:00 PM")])
+    d = run(
+        [clock("11:05 PM")],
+        state=first.state,
+        trigger=Trigger.REFRESH,
+        now=NOW + FIVE,
+    )
+    assert d.state.shown_at == NOW, "still showing since it first went up"
+    assert d.next_wake == NOW + FIVE + FIVE
+    assert d.next_wake < NOW + timedelta(minutes=20), "inside the original dwell"
+
+
+def test_refresh_with_unchanged_text_costs_no_flip():
+    first = run([clock("11:00 PM")])
+    d = run(
+        [clock("11:00 PM")],
+        state=first.state,
+        trigger=Trigger.REFRESH,
+        now=NOW + FIVE,
+    )
+    assert d.write is False
+
+
+def test_the_dwell_still_expires_while_an_item_keeps_refreshing():
+    first = run([clock("11:00 PM")])
+    d = run(
+        [clock("11:20 PM"), item("a")],
+        state=first.state,
+        trigger=Trigger.DWELL,
+        now=NOW + timedelta(minutes=20),
+    )
+    assert d.item.id == "a", "the clock surrenders the board on time"
+
+
+def test_refresh_after_the_refreshing_item_is_gone_advances_normally():
+    first = run([clock("11:00 PM")])
+    d = run([item("a")], state=first.state, trigger=Trigger.REFRESH, now=NOW + FIVE)
+    assert d.text == "A"
