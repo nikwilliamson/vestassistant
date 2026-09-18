@@ -49,8 +49,12 @@ class TodoSource(Source):
             )
         )
 
-    @callback
     def _handle_state(self, event) -> None:
+        """Same thread-safety caveat as the coordinator's notifier."""
+        self.hass.loop.call_soon_threadsafe(self._spawn_refresh)
+
+    @callback
+    def _spawn_refresh(self) -> None:
         self.hass.async_create_task(self._refresh_and_notify())
 
     async def _refresh_and_notify(self) -> None:

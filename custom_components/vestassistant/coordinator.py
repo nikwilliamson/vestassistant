@@ -169,8 +169,20 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
     # the scheduling loop
     # ------------------------------------------------------------------
 
-    @callback
     def _source_changed(self) -> None:
+        """Ask for a re-evaluation. Safe to call from any thread.
+
+        Sources are driven by state-change listeners, which usually run on the
+        event loop - but not always: a registry write on a worker thread can
+        reach a listener synchronously, and `async_create_task` is not thread
+        safe. Home Assistant detects that and logs a RuntimeError. Hopping
+        through the loop covers both cases, and costs one iteration when
+        already on it.
+        """
+        self.hass.loop.call_soon_threadsafe(self._schedule_tick)
+
+    @callback
+    def _schedule_tick(self) -> None:
         self.hass.async_create_task(self.async_tick(Trigger.ITEMS_CHANGED))
 
     def collect(self, now: datetime) -> list[Item]:
