@@ -8,6 +8,7 @@ restarts, rate limits and other people touching the board.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import enum
 import logging
 from typing import Any
 
@@ -35,6 +36,21 @@ from .core.scheduler import decide
 from .transport.base import Transport, VestaboardAuthError, VestaboardError
 
 _LOGGER = logging.getLogger(__name__)
+
+#: How long to wait before trying again after the board refuses a write.
+WRITE_RETRY = timedelta(seconds=30)
+
+
+class WriteOutcome(enum.StrEnum):
+    """What happened to an attempted write."""
+
+    WRITTEN = "written"
+    DEFERRED = "deferred"
+    """Held back to respect the board's minimum spacing between messages."""
+
+    FAILED = "failed"
+    """The board refused it - rate limited, offline, or still flipping."""
+
 
 VestassistantConfigEntry = ConfigEntry["VestassistantCoordinator"]
 
@@ -84,6 +100,11 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         stored = await self._store.async_load() or {}
         self.cursor = _cursor_from_dict(stored.get("cursor"))
         self.rotation_enabled = stored.get("rotation_enabled", True)
+        if written := stored.get("last_write_at"):
+            # Survives a reload. Adding a source reloads the config entry and
+            # builds a fresh coordinator; without this the spacing guard reset
+            # and the next write landed inside the board's flip window.
+            self._last_write_at = datetime.fromisoformat(written)
         if self._service_source is not None:
             self._service_source.restore(stored.get("service_items"))
 
@@ -181,29 +202,44 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             config=self.scheduler_config,
             trigger=trigger,
         )
+        previously_rendered = self.cursor.last_rendered
         self.cursor = decision.state
         self.decision = decision
 
+        wake = decision.next_wake
         if decision.write:
-            await self._async_render(decision, now)
+            outcome = await self._async_render(decision, now)
+            if outcome is not WriteOutcome.WRITTEN:
+                # The board did NOT change, so the cursor must not claim it
+                # did. Leaving last_rendered set would make the next tick see
+                # the message as already up and skip it forever - the board
+                # and Home Assistant would silently disagree about what is on
+                # the wall, which is the one failure this design exists to
+                # avoid.
+                self.cursor = self.cursor.with_(last_rendered=previously_rendered)
+                wake = self._retry_at(now, outcome)
 
-        self._schedule_wake(decision.next_wake)
+        self._schedule_wake(wake)
         self.async_update_listeners()
         await self._async_save()
 
-    async def _async_render(self, decision: Decision, now: datetime) -> None:
+    def _retry_at(self, now: datetime, outcome: WriteOutcome) -> datetime:
+        """When to come back after a write that did not land."""
+        gap = self.transport.min_write_interval or WRITE_RETRY
+        if outcome is WriteOutcome.DEFERRED and self._last_write_at is not None:
+            return self._last_write_at + gap
+        return now + max(gap, WRITE_RETRY)
+
+    async def _async_render(self, decision: Decision, now: datetime) -> WriteOutcome:
         geometry = self.geometry
         if geometry is None:
-            return
+            return WriteOutcome.FAILED
 
-        # The cloud silently drops anything sent inside its write window, so a
-        # burst of arrivals has to be spaced rather than fired.
+        # The cloud drops or rejects anything sent while the board is still
+        # flipping, so a burst of arrivals has to be spaced rather than fired.
         gap = self.transport.min_write_interval
-        if gap and self._last_write_at is not None:
-            earliest = self._last_write_at + gap
-            if now < earliest:
-                self._schedule_wake(earliest, Trigger.MANUAL)
-                return
+        if gap and self._last_write_at is not None and now < self._last_write_at + gap:
+            return WriteOutcome.DEFERRED
 
         if decision.blank:
             grid = blank(geometry)
@@ -226,11 +262,17 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         try:
             await self.transport.write(grid)
         except VestaboardError as err:
-            _LOGGER.error("could not write to the board: %s", err)
-            return
+            _LOGGER.warning(
+                "could not write to the board (will retry): %s", err
+            )
+            # Treat a refused write as though it had just happened, so the
+            # retry still respects the spacing the board wants.
+            self._last_write_at = now
+            return WriteOutcome.FAILED
 
         self._last_written_grid = grid
         self._last_write_at = now
+        return WriteOutcome.WRITTEN
 
     # Alignment lives on the entry options; kept as properties so the render
     # path stays readable.
@@ -320,6 +362,9 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             {
                 "cursor": _cursor_to_dict(self.cursor),
                 "rotation_enabled": self.rotation_enabled,
+                "last_write_at": (
+                    self._last_write_at.isoformat() if self._last_write_at else None
+                ),
                 "service_items": (
                     self._service_source.as_dict() if self._service_source else {}
                 ),
