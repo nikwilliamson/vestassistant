@@ -75,9 +75,11 @@ class ListSource(Source):
         name: str,
         entries: list[list[str]],
         tier: str = TIER_CONTENT,
+        colour: int | None = None,
     ) -> None:
         super().__init__(hass, source_id, name)
         self.tier = tier
+        self.colour = colour
         self.entries = entries
 
     def items(self, now: datetime) -> list[Item]:
@@ -92,6 +94,7 @@ class ListSource(Source):
                     source=self.source_id,
                     cards=tuple(cards),
                     tier=self.tier,
+                    colour=self.colour,
                     meta={"source_name": self.name},
                 )
             )

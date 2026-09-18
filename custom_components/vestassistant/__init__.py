@@ -23,6 +23,7 @@ import voluptuous as vol
 
 from .const import (
     ATTR_CARDS,
+    ATTR_COLOUR,
     ATTR_DURATION,
     ATTR_EXPIRE_WHEN,
     ATTR_ITEM_ID,
@@ -33,6 +34,7 @@ from .const import (
     CONF_BLEND,
     CONF_CLOCK,
     CONF_CLOCK_REFRESH,
+    CONF_COLOUR,
     CONF_DWELL,
     CONF_ENTITY_ID,
     CONF_ENTRIES,
@@ -172,16 +174,18 @@ def _source_from_subentry(hass: HomeAssistant, subentry) -> object | None:
     kind = data.get(CONF_SOURCE_TYPE)
     title = subentry.title or kind or "source"
     tier = data.get(CONF_TIER, TIER_CONTENT)
+    colour = data.get(CONF_COLOUR)
+    colour = int(colour) if colour is not None else None
     if kind == SOURCE_LIST:
         entries = [
             [part.strip() for part in str(line).split("|")]
             for line in data.get(CONF_ENTRIES, [])
             if str(line).strip()
         ]
-        return ListSource(hass, subentry.subentry_id, title, entries, tier)
+        return ListSource(hass, subentry.subentry_id, title, entries, tier, colour)
     if kind == SOURCE_TODO:
         return TodoSource(
-            hass, subentry.subentry_id, title, data[CONF_ENTITY_ID], tier
+            hass, subentry.subentry_id, title, data[CONF_ENTITY_ID], tier, colour
         )
     if kind == SOURCE_DECLARED:
         return DeclaredSource(
@@ -190,6 +194,7 @@ def _source_from_subentry(hass: HomeAssistant, subentry) -> object | None:
             title,
             entity_ids=data.get(CONF_ENTITY_ID) or None,
             default_tier=tier,
+            colour=colour,
         )
     return None
 
@@ -217,6 +222,9 @@ ADD_ITEM_SCHEMA = vol.Schema(
         vol.Exclusive(ATTR_MESSAGE, "content"): cv.string,
         vol.Exclusive(ATTR_CARDS, "content"): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional(ATTR_TIER, default=TIER_CONTENT): cv.string,
+        vol.Optional(ATTR_COLOUR): vol.All(
+            vol.Coerce(int), vol.Range(min=63, max=68)
+        ),
         vol.Optional(ATTR_TTL): cv.time_period,
         vol.Optional(ATTR_EXPIRE_WHEN): cv.template,
         vol.Optional("entry_id"): cv.string,
@@ -278,6 +286,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 now=dt_util.now(),
                 ttl=call.data.get(ATTR_TTL),
                 expire_when=expire.template if expire else None,
+                colour=call.data.get(ATTR_COLOUR),
             )
             await coordinator.async_tick(Trigger.ITEMS_CHANGED)
 

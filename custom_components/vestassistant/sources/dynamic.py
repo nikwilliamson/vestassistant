@@ -16,8 +16,18 @@ from .base import Source
 
 ATTR_MESSAGE = "message"
 ATTR_TIER = "tier"
+ATTR_COLOUR = "colour"
 ATTR_CARDS = "cards"
 ATTR_TTL = "ttl"
+
+
+def _as_colour(value: object, default: int | None) -> int | None:
+    """A declared colour, or the source's default if it is not usable."""
+    try:
+        code = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return code if 63 <= code <= 68 else default
 
 
 class TodoSource(Source):
@@ -35,10 +45,12 @@ class TodoSource(Source):
         name: str,
         entity_id: str,
         tier: str = TIER_TASK,
+        colour: int | None = None,
     ) -> None:
         super().__init__(hass, source_id, name)
         self.entity_id = entity_id
         self.tier = tier
+        self.colour = colour
         self._cache: list[tuple[str, str]] = []
 
     async def async_setup(self) -> None:
@@ -90,6 +102,7 @@ class TodoSource(Source):
                 source=self.source_id,
                 cards=(summary,),
                 tier=self.tier,
+                colour=self.colour,
                 meta={"source_name": self.name, "entity_id": self.entity_id},
             )
             for uid, summary in self._cache
@@ -118,11 +131,13 @@ class DeclaredSource(Source):
         entity_ids: list[str] | None = None,
         domains: tuple[str, ...] = ("binary_sensor", "input_boolean", "sensor"),
         default_tier: str = TIER_TASK,
+        colour: int | None = None,
     ) -> None:
         super().__init__(hass, source_id, name)
         self.entity_ids = entity_ids or []
         self.domains = domains
         self.default_tier = default_tier
+        self.colour = colour
 
     async def async_setup(self) -> None:
         if self.entity_ids:
@@ -170,6 +185,7 @@ class DeclaredSource(Source):
                     source=self.source_id,
                     cards=tuple(str(c) for c in cards),
                     tier=str(state.attributes.get(ATTR_TIER, self.default_tier)),
+                    colour=_as_colour(state.attributes.get(ATTR_COLOUR), self.colour),
                     meta={"source_name": self.name, "entity_id": entity_id},
                 )
             )
@@ -209,12 +225,14 @@ class ServiceSource(Source):
         ttl: timedelta | None = None,
         expire_when: str | None = None,
         dwell: timedelta | None = None,
+        colour: int | None = None,
     ) -> None:
         # Idempotent on id: calling add twice updates rather than duplicating,
         # which is the de-duplication every caller would otherwise hand-roll.
         self._items[item_id] = {
             "cards": list(cards),
             "tier": tier,
+            "colour": colour,
             "created": now.isoformat(),
             "expires": (now + ttl).isoformat() if ttl else None,
             "expire_when": expire_when,
@@ -250,6 +268,7 @@ class ServiceSource(Source):
                     source=self.source_id,
                     cards=tuple(raw["cards"]),
                     tier=raw.get("tier", TIER_CONTENT),
+                    colour=raw.get("colour"),
                     created=_parse(raw.get("created")),
                     expires=_parse(expires),
                     dwell=(

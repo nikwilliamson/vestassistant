@@ -27,6 +27,7 @@ from .const import (
     CONF_BLEND,
     CONF_CLOCK,
     CONF_CLOCK_REFRESH,
+    CONF_COLOUR,
     CONF_DWELL,
     CONF_ENABLEMENT_TOKEN,
     CONF_ENTITY_ID,
@@ -65,6 +66,17 @@ TIER_SELECTOR = selector.SelectSelector(
     selector.SelectSelectorConfig(
         options=[TIER_CRITICAL, TIER_TASK, TIER_CONTENT],
         translation_key="tier",
+        mode=selector.SelectSelectorMode.DROPDOWN,
+    )
+)
+
+#: Only the six hues that behave identically on both transports and both
+#: models. 71 is unavailable on the local API and 69 and 70 invert with the
+#: board's physical colour, which neither API reports.
+COLOUR_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=["63", "64", "65", "66", "67", "68"],
+        translation_key="colour",
         mode=selector.SelectSelectorMode.DROPDOWN,
     )
 )
@@ -365,6 +377,7 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                         CONF_SOURCE_TYPE: SOURCE_LIST,
                         CONF_ENTRIES: entries,
                         CONF_TIER: user_input[CONF_TIER],
+                        CONF_COLOUR: user_input.get(CONF_COLOUR),
                     },
                 )
 
@@ -374,6 +387,10 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                 {
                     vol.Required("name", default="Messages"): str,
                     vol.Required(CONF_TIER, default=TIER_CONTENT): TIER_SELECTOR,
+                    vol.Optional(
+                        CONF_COLOUR,
+                        description={"suggested_value": None},
+                    ): COLOUR_SELECTOR,
                     vol.Required(CONF_ENTRIES, default=[]): selector.TextSelector(
                         selector.TextSelectorConfig(multiline=True, multiple=True)
                     ),
@@ -393,6 +410,7 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                     CONF_SOURCE_TYPE: SOURCE_TODO,
                     CONF_ENTITY_ID: user_input[CONF_ENTITY_ID],
                     CONF_TIER: user_input[CONF_TIER],
+                    CONF_COLOUR: user_input.get(CONF_COLOUR),
                 },
             )
         return self.async_show_form(
@@ -404,6 +422,10 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                         selector.EntitySelectorConfig(domain="todo")
                     ),
                     vol.Required(CONF_TIER, default=TIER_TASK): TIER_SELECTOR,
+                    vol.Optional(
+                        CONF_COLOUR,
+                        description={"suggested_value": None},
+                    ): COLOUR_SELECTOR,
                 }
             ),
         )
@@ -418,6 +440,7 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                     CONF_SOURCE_TYPE: SOURCE_DECLARED,
                     CONF_ENTITY_ID: user_input.get(CONF_ENTITY_ID) or [],
                     CONF_TIER: user_input[CONF_TIER],
+                    CONF_COLOUR: user_input.get(CONF_COLOUR),
                 },
             )
         return self.async_show_form(
@@ -432,6 +455,10 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                         )
                     ),
                     vol.Required(CONF_TIER, default=TIER_TASK): TIER_SELECTOR,
+                    vol.Optional(
+                        CONF_COLOUR,
+                        description={"suggested_value": None},
+                    ): COLOUR_SELECTOR,
                 }
             ),
         )

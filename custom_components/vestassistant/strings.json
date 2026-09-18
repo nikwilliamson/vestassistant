@@ -77,18 +77,19 @@
           "data": {
             "name": "Name",
             "tier": "Tier",
+            "colour": "Colour",
             "entries": "Messages"
           }
         },
         "todo": {
           "title": "To-do list",
           "description": "Every incomplete item on the list becomes a message.",
-          "data": { "name": "Name", "entity_id": "List", "tier": "Tier" }
+          "data": { "name": "Name", "entity_id": "List", "tier": "Tier", "colour": "Colour" }
         },
         "declared": {
           "title": "Declared cards",
           "description": "Entities that are on and carry a 'message' attribute become messages for as long as they stay on. Leave the entity list empty to pick up any entity that declares one.",
-          "data": { "name": "Name", "entity_id": "Entities", "tier": "Tier" }
+          "data": { "name": "Name", "entity_id": "Entities", "tier": "Tier", "colour": "Colour" }
         }
       },
       "error": {
@@ -120,6 +121,16 @@
         "content": "Content - the resting state of the board"
       }
     },
+    "colour": {
+      "options": {
+        "63": "Red",
+        "64": "Orange",
+        "65": "Yellow",
+        "66": "Green",
+        "67": "Blue",
+        "68": "Violet"
+      }
+    },
     "source_type": {
       "options": {
         "list": "A list of messages you type here",
@@ -143,6 +154,7 @@
         "message": { "name": "Message", "description": "A single board's worth of text." },
         "cards": { "name": "Cards", "description": "Several boards shown in order, for a message too long for one. Never interleaved with anything else." },
         "tier": { "name": "Tier", "description": "How urgently this competes for the board." },
+        "colour": { "name": "Colour", "description": "The colour of this item's frame. Leave blank to use the source's colour." },
         "ttl": { "name": "Expire after", "description": "Remove automatically after this long." },
         "expire_when": { "name": "Expire when", "description": "A template evaluated continuously. When it becomes true the item is removed, so you do not have to catch the moment it stops being relevant." },
         "entry_id": { "name": "Board", "description": "Leave empty to target every board." }
