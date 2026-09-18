@@ -27,17 +27,23 @@ CONF_CLOCK: Final = "clock_enabled"
 CONF_CLOCK_REFRESH: Final = "clock_refresh_minutes"
 CONF_FORECAST: Final = "forecast_enabled"
 CONF_FORECAST_ENTITY: Final = "forecast_entity"
+CONF_BOARD_COLOUR: Final = "board_colour"
+BOARD_BLACK: Final = "black"
+BOARD_WHITE: Final = "white"
 
 CONF_SOURCE_TYPE: Final = "source_type"
 CONF_ENTRIES: Final = "entries"
 CONF_TIER: Final = "tier"
 CONF_COLOUR: Final = "colour"
 CONF_ENTITY_ID: Final = "entity_id"
+CONF_PATTERNS: Final = "patterns"
+CONF_HUES: Final = "hues"
 
 SUBENTRY_SOURCE: Final = "source"
 SOURCE_LIST: Final = "list"
 SOURCE_TODO: Final = "todo"
 SOURCE_DECLARED: Final = "declared"
+SOURCE_PATTERN: Final = "pattern"
 
 DEFAULT_DWELL_MINUTES: Final = 20
 DEFAULT_SUMMARY_THRESHOLD: Final = 3

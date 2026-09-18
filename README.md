@@ -52,17 +52,19 @@ see [Entities](#entities). Three things have no sensible entity and live in
 | --- | --- |
 | Summary card text | The wording of the count card. `{n}` is the number |
 | How attention and content share the board | *Alternate* one of each in turn, or *Attention first* to run content only when nothing needs you |
+| Board colour | Black or white. Neither API reports it, and it decides whether pattern cards use white tiles or black ones |
 | Weather entity | Which entity the forecast card reads. Without one the forecast shows nothing |
 
 ## Sources
 
-**Settings → Devices & Services → Vestassistant → Add source.** Three kinds:
+**Settings → Devices & Services → Vestassistant → Add source.** Four kinds:
 
 | Source | |
 | --- | --- |
-| **Messages you type here** | One per line, rotating in the order you write them. This is the resting state of the board — what shows when nothing needs you. Checked against your board as you save, so you find out something does not fit while you can still reword it |
+| **Messages you type here** | One per box, rotating in the order you write them. A `\|` starts a new row on the board, so `GREAT SCOTT\|\|- DOC BROWN` is three rows with a blank one between. This is the resting state of the board — what shows when nothing needs you. Checked against your board as you save, so you find out something does not fit while you can still reword it |
 | **Items from a to-do list** | Every incomplete item becomes a message. Tick it off and it leaves the board |
 | **Messages carried by other entities** | For wording that belongs next to whatever raises it. Any entity that is `on` and has a `message` attribute becomes a message while it stays on — no automation needed. See [docs/automations.md](docs/automations.md) |
+| **Colours and patterns** | Decorative fills for the board between messages: rainbow, stripes, a wash, checkerboard, a frame, confetti, a mosaic, and a sun that paints dawn, day, dusk and night. Each one you tick is a content card. They drift once an hour so an idle board is not flapping |
 
 Each source has a **tier** and an optional **colour**.
 

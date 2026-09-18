@@ -16,12 +16,13 @@ from .entity import VestassistantEntity
 HA_MAX = 255
 
 #: The characters a Vestaboard can physically show, plus braces for colour
-#: codes like {63}. Lower case is allowed because the board uppercases
-#: everything anyway. Built by hand from ``vesta.chars.PRINTABLE`` rather than
-#: generated at import time, so a change to that table is a visible diff here.
+#: codes like {63} and a bar for a row break. Lower case is allowed because
+#: the board uppercases everything anyway. Built by hand from
+#: ``vesta.chars.PRINTABLE`` rather than generated at import time, so a
+#: change to that table is a visible diff here.
 #: The frontend rejects anything outside it as you type; laying the message
 #: out is still what decides whether it actually fits.
-PATTERN = r"""[ A-Za-z!"#$%&'()+,\-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ°{}]*"""
+PATTERN = r"""[ A-Za-z!"#$%&'()+,\-./0123456789:;=?@°{}|]*"""
 
 PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 

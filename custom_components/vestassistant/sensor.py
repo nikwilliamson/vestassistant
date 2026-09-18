@@ -37,12 +37,15 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
 
     @property
     def native_value(self) -> str | None:
-        text = self.coordinator.current_text
-        if text is None:
+        displayed = self.coordinator.displayed_decision
+        if displayed is None or displayed.text is None:
             return None
+        # A pattern's text is a boardful of chips; the item names itself.
+        if displayed.item is not None and (label := displayed.item.meta.get("label")):
+            return label
         # State is capped at 255 characters; a board cannot hold that much,
         # but a misconfigured source could.
-        return text[:255]
+        return displayed.text[:255]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

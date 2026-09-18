@@ -12,6 +12,7 @@ and is unit tested directly.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
@@ -20,9 +21,16 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
+from ..core.layout import NOTE, Geometry
 from ..core.models import TIER_CONTENT, Item
+from ..core.patterns import CONTRAST, HUES, PATTERNS, TIME_OF_DAY, WHITE, render
 from ..core.phrasing import clock_text, forecast_text
 from .base import Source
+
+#: How often a pattern's seed moves on, and how often a time-of-day pattern
+#: is redrawn while it is up. Every rewrite is a physical flip.
+PATTERN_DRIFT = timedelta(hours=1)
+PATTERN_REFRESH = timedelta(minutes=15)
 
 #: How often to ask the weather integration for a fresh forecast. Its own
 #: entity updates are the primary trigger; this is the backstop for an
@@ -161,4 +169,54 @@ class ForecastSource(Source):
                 tier=self.tier,
                 meta={"source_name": self.name, "entity_id": self.entity_id},
             )
+        ]
+
+
+class PatternSource(Source):
+    """Decorative fills, one item per chosen pattern.
+
+    The only source built from a subentry that is not made of words. Each
+    pattern is one card in the content rotation, so the board is coloured
+    between messages rather than instead of them. The wording - or rather
+    the drawing - lives in ``core.patterns``.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        source_id: str,
+        name: str,
+        patterns: list[str],
+        hues: list[int | str] | None = None,
+        contrast: int = WHITE,
+        geometry_getter: Callable[[], Geometry | None] | None = None,
+    ) -> None:
+        super().__init__(hass, source_id, name)
+        self.patterns = [p for p in patterns if p in PATTERNS]
+        self.hues = tuple(h for h in (hues or []) if h in HUES or h == CONTRAST)
+        self.contrast = contrast
+        self._geometry = geometry_getter or (lambda: None)
+
+    def items(self, now: datetime) -> list[Item]:
+        geometry = self._geometry() or NOTE
+        # Floored to the hour: the same seed for every tick inside it, so a
+        # pattern on the board is not rewritten by an unrelated queue change.
+        seed = int(now.timestamp()) // int(PATTERN_DRIFT.total_seconds())
+        return [
+            Item(
+                id=name,
+                source=self.source_id,
+                text=render(
+                    name,
+                    geometry,
+                    self.hues,
+                    contrast=self.contrast,
+                    seed=seed,
+                    now=now,
+                ),
+                tier=TIER_CONTENT,
+                refresh=PATTERN_REFRESH if name in TIME_OF_DAY else None,
+                meta={"source_name": self.name, "label": name.title()},
+            )
+            for name in self.patterns
         ]

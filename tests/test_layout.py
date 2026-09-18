@@ -101,6 +101,18 @@ def test_multiline_input_respects_explicit_breaks():
     assert [line.rstrip() for line in r.preview.splitlines()] == ["ONE", "TWO", "THREE"]
 
 
+def test_a_bar_is_a_row_break_and_two_bars_leave_a_blank_row():
+    # The list-source form is single-line per message, so this is the only
+    # way to author a break there.
+    r = fit("GREAT SCOTT||- DOC BROWN", NOTE, align="left", valign="top")
+    assert [line.rstrip() for line in r.preview.splitlines()] == [
+        "GREAT SCOTT",
+        "",
+        "- DOC BROWN",
+    ]
+    assert r.fits
+
+
 class TestEncodingErrors:
     def test_unsupported_character_is_reported_not_raised(self):
         result = fit("HELLO*WORLD", NOTE)

@@ -25,8 +25,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
 from .const import (
+    BOARD_BLACK,
+    BOARD_WHITE,
     CONF_API_KEY,
     CONF_BLEND,
+    CONF_BOARD_COLOUR,
     CONF_CLOCK,
     CONF_CLOCK_REFRESH,
     CONF_COLOUR,
@@ -37,6 +40,8 @@ from .const import (
     CONF_FORECAST,
     CONF_FORECAST_ENTITY,
     CONF_HOST,
+    CONF_HUES,
+    CONF_PATTERNS,
     CONF_SOURCE_TYPE,
     CONF_SUMMARY_TEMPLATE,
     CONF_SUMMARY_THRESHOLD,
@@ -51,6 +56,7 @@ from .const import (
     DOMAIN,
     SOURCE_DECLARED,
     SOURCE_LIST,
+    SOURCE_PATTERN,
     SOURCE_TODO,
     SUBENTRY_SOURCE,
     TRANSPORT_CLOUD,
@@ -59,6 +65,7 @@ from .const import (
 from .coordinator import VestassistantCoordinator
 from .core.layout import NOTE, Geometry, fit
 from .core.models import TIER_CONTENT, TIER_CRITICAL, TIER_TASK, TierSet, resolve_band
+from .core.patterns import CONTRAST, HUES, PATTERNS
 from .transport.base import Transport, VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
@@ -78,6 +85,32 @@ COLOUR_SELECTOR = selector.SelectSelector(
     selector.SelectSelectorConfig(
         options=["63", "64", "65", "66", "67", "68"],
         translation_key="colour",
+        mode=selector.SelectSelectorMode.DROPDOWN,
+    )
+)
+
+PATTERN_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=list(PATTERNS),
+        translation_key="pattern",
+        mode=selector.SelectSelectorMode.LIST,
+        multiple=True,
+    )
+)
+
+HUES_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=[*(str(h) for h in HUES), CONTRAST],
+        translation_key="hue",
+        mode=selector.SelectSelectorMode.LIST,
+        multiple=True,
+    )
+)
+
+BOARD_COLOUR_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=[BOARD_BLACK, BOARD_WHITE],
+        translation_key="board_colour",
         mode=selector.SelectSelectorMode.DROPDOWN,
     )
 )
@@ -248,6 +281,7 @@ def _default_options() -> dict[str, Any]:
         CONF_CLOCK: False,
         CONF_CLOCK_REFRESH: DEFAULT_CLOCK_REFRESH,
         CONF_FORECAST: False,
+        CONF_BOARD_COLOUR: BOARD_BLACK,
     }
 
 
@@ -263,7 +297,8 @@ class VestassistantOptionsFlow(OptionsFlow):
         all have their own entities, so they are not repeated here - they
         live in the same options dict and would otherwise be two controls for
         one value. What is left is a free-text template, a choice of
-        strategy, and an entity picker.
+        strategy, an entity picker, and the board's colour - which neither
+        API reports, and which decides whether white or black tiles show.
         """
         if user_input is not None:
             # Merge rather than replace: the entities write into these same
@@ -274,6 +309,7 @@ class VestassistantOptionsFlow(OptionsFlow):
                     **self.config_entry.options,
                     CONF_SUMMARY_TEMPLATE: user_input[CONF_SUMMARY_TEMPLATE],
                     CONF_BLEND: user_input[CONF_BLEND],
+                    CONF_BOARD_COLOUR: user_input[CONF_BOARD_COLOUR],
                     CONF_FORECAST_ENTITY: user_input.get(CONF_FORECAST_ENTITY),
                 }
             )
@@ -298,6 +334,10 @@ class VestassistantOptionsFlow(OptionsFlow):
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
+                    vol.Required(
+                        CONF_BOARD_COLOUR,
+                        default=options.get(CONF_BOARD_COLOUR, BOARD_BLACK),
+                    ): BOARD_COLOUR_SELECTOR,
                     vol.Optional(
                         CONF_FORECAST_ENTITY,
                         description={
@@ -354,6 +394,8 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             return await self.async_step_todo()
         if kind == SOURCE_DECLARED:
             return await self.async_step_declared()
+        if kind == SOURCE_PATTERN:
+            return await self.async_step_pattern()
         return await self.async_step_list()
 
     # -- picking a kind ---------------------------------------------------
@@ -367,6 +409,8 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                 return await self.async_step_list()
             if kind == SOURCE_TODO:
                 return await self.async_step_todo()
+            if kind == SOURCE_PATTERN:
+                return await self.async_step_pattern()
             return await self.async_step_declared()
 
         return self.async_show_form(
@@ -376,7 +420,12 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                     vol.Required(CONF_SOURCE_TYPE, default=SOURCE_LIST): (
                         selector.SelectSelector(
                             selector.SelectSelectorConfig(
-                                options=[SOURCE_LIST, SOURCE_TODO, SOURCE_DECLARED],
+                                options=[
+                                    SOURCE_LIST,
+                                    SOURCE_TODO,
+                                    SOURCE_DECLARED,
+                                    SOURCE_PATTERN,
+                                ],
                                 translation_key="source_type",
                                 mode=selector.SelectSelectorMode.LIST,
                             )
@@ -525,6 +574,42 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                     ): COLOUR_SELECTOR,
                 }
             ),
+        )
+
+    async def async_step_pattern(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        errors: dict[str, str] = {}
+        current = self._current()
+        if user_input is not None:
+            patterns = user_input.get(CONF_PATTERNS) or []
+            if not patterns:
+                errors[CONF_PATTERNS] = "no_patterns"
+            else:
+                return self._save(
+                    user_input["name"],
+                    {
+                        CONF_SOURCE_TYPE: SOURCE_PATTERN,
+                        CONF_PATTERNS: patterns,
+                        CONF_HUES: user_input.get(CONF_HUES) or [],
+                    },
+                )
+        return self.async_show_form(
+            step_id="pattern",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("name", default=self._name("Colour")): str,
+                    vol.Required(
+                        CONF_PATTERNS,
+                        default=current.get(CONF_PATTERNS, list(PATTERNS)),
+                    ): PATTERN_SELECTOR,
+                    vol.Optional(
+                        CONF_HUES,
+                        description={"suggested_value": current.get(CONF_HUES)},
+                    ): HUES_SELECTOR,
+                }
+            ),
+            errors=errors,
         )
 
     def _coordinator(self) -> VestassistantCoordinator | None:

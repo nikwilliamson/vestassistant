@@ -20,6 +20,7 @@ __all__ = [
     "FLAGSHIP",
     "NOTE",
     "PRINTABLE",
+    "ROW_BREAK",
     "Band",
     "FitResult",
     "Geometry",
@@ -30,6 +31,12 @@ __all__ = [
 ]
 
 BLANK = 0
+
+#: An explicit row break, for text typed into a single-line field. The bar
+#: is not in the Vestaboard character set, so it cannot collide with
+#: anything a board could show, and a message that used one by mistake
+#: would have been rejected anyway.
+ROW_BREAK = "|"
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +164,7 @@ def fit(
     Never raises: overlong input is truncated and reported, and text the
     board cannot encode comes back with ``error`` set.
 
+    A newline or a ``|`` starts a new row; an empty line is a blank row.
     With ``shorten``, the abbreviation ladder is tried before truncation.
     With ``band``, the left-hand columns are reserved for a coloured stripe
     and the text is laid out in what remains — which is the one thing a chip
@@ -223,7 +231,7 @@ def _fit_once(
     acceptable squeeze (rendering one that is already saved).
     """
     lines: list[list[int]] = []
-    for source_line in text.splitlines() or [""]:
+    for source_line in text.replace(ROW_BREAK, "\n").splitlines() or [""]:
         try:
             codes = encode(source_line.upper())
         except ValueError as err:

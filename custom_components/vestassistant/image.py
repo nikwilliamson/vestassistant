@@ -12,12 +12,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from .const import BOARD_BLACK, BOARD_WHITE, CONF_BOARD_COLOUR
 from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .core.layout import PRINTABLE
 from .entity import VestassistantEntity
 
-# Vestaboard colour codes 63-71. 69/70 read as white/black on a black board;
-# 71 is 'filled', which the board renders as its own colour.
+# Vestaboard colour codes 63-70. 71 is "filled", the board's own colour.
 SWATCH = {
     63: "#da2f2b",
     64: "#e6791f",
@@ -27,7 +27,13 @@ SWATCH = {
     68: "#7a3fb5",
     69: "#f2f2f2",
     70: "#101010",
-    71: "#101010",
+}
+
+#: Per board colour: the case, a blank flap, the printed character, and
+#: what the "filled" code 71 shows.
+THEMES = {
+    BOARD_BLACK: ("#141414", "#1e1e1e", "#f4f1ea", "#101010"),
+    BOARD_WHITE: ("#e9e6df", "#f7f5f0", "#1a1a1a", "#f7f5f0"),
 }
 
 PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
@@ -62,10 +68,12 @@ class BoardImage(VestassistantEntity, ImageEntity):
         grid = self.coordinator.data
         if not grid:
             return None
-        return _svg(grid).encode("utf-8")
+        board = self.coordinator.config_entry.options.get(CONF_BOARD_COLOUR)
+        return _svg(grid, board or BOARD_BLACK).encode("utf-8")
 
 
-def _svg(grid: list[list[int]]) -> str:
+def _svg(grid: list[list[int]], board: str = BOARD_BLACK) -> str:
+    case, flap, ink, filled = THEMES.get(board, THEMES[BOARD_BLACK])
     cell_w, cell_h, gap = 34, 48, 3
     rows, cols = len(grid), max(len(r) for r in grid)
     width = cols * (cell_w + gap) + gap
@@ -73,13 +81,13 @@ def _svg(grid: list[list[int]]) -> str:
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
         f'width="{width}" height="{height}" role="img">',
-        f'<rect width="{width}" height="{height}" rx="10" fill="#141414"/>',
+        f'<rect width="{width}" height="{height}" rx="10" fill="{case}"/>',
     ]
     for r, row in enumerate(grid):
         for c, code in enumerate(row):
             x = gap + c * (cell_w + gap)
             y = gap + r * (cell_h + gap)
-            fill = SWATCH.get(code, "#1e1e1e")
+            fill = filled if code == 71 else SWATCH.get(code, flap)
             parts.append(
                 f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" rx="3" '
                 f'fill="{fill}"/>'
@@ -96,7 +104,7 @@ def _svg(grid: list[list[int]]) -> str:
                         f'<text x="{x + cell_w / 2}" y="{y + cell_h / 2}" '
                         'text-anchor="middle" dominant-baseline="central" '
                         'font-family="ui-monospace,Menlo,Consolas,monospace" '
-                        f'font-size="26" fill="#f4f1ea">{_esc(char)}</text>'
+                        f'font-size="26" fill="{ink}">{_esc(char)}</text>'
                     )
     parts.append("</svg>")
     return "".join(parts)

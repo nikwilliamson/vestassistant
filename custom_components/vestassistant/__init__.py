@@ -34,8 +34,10 @@ from .const import (
     ATTR_MESSAGE,
     ATTR_TIER,
     ATTR_TTL,
+    BOARD_WHITE,
     CONF_API_KEY,
     CONF_BLEND,
+    CONF_BOARD_COLOUR,
     CONF_CLOCK,
     CONF_CLOCK_REFRESH,
     CONF_COLOUR,
@@ -45,6 +47,8 @@ from .const import (
     CONF_FORECAST,
     CONF_FORECAST_ENTITY,
     CONF_HOST,
+    CONF_HUES,
+    CONF_PATTERNS,
     CONF_QUIET_END,
     CONF_QUIET_START,
     CONF_SOURCE_TYPE,
@@ -66,15 +70,17 @@ from .const import (
     SERVICE_VALIDATE,
     SOURCE_DECLARED,
     SOURCE_LIST,
+    SOURCE_PATTERN,
     SOURCE_TODO,
     TRANSPORT_CLOUD,
 )
 from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .core.layout import NOTE, Geometry, fit
 from .core.models import TIER_CONTENT, SchedulerConfig, TierSet, Trigger, resolve_band
+from .core.patterns import BLACK, CONTRAST, WHITE
 from .sources.base import ListSource, Source
 from .sources.dynamic import DeclaredSource, ServiceSource, TodoSource
-from .sources.generated import ClockSource, ForecastSource
+from .sources.generated import ClockSource, ForecastSource, PatternSource
 from .transport.base import Transport, VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
@@ -146,7 +152,7 @@ async def async_setup_entry(
     for source in _generated_sources(hass, entry):
         coordinator.register_source(source)
     for subentry in entry.subentries.values():
-        source = _source_from_subentry(hass, subentry)
+        source = _source_from_subentry(hass, subentry, coordinator)
         if source is not None:
             coordinator.register_source(source)
 
@@ -191,7 +197,7 @@ def _generated_sources(hass: HomeAssistant, entry: ConfigEntry) -> list[Source]:
 
 
 def _source_from_subentry(
-    hass: HomeAssistant, subentry: ConfigSubentry
+    hass: HomeAssistant, subentry: ConfigSubentry, coordinator: VestassistantCoordinator
 ) -> Source | None:
     data = subentry.data
     kind = data.get(CONF_SOURCE_TYPE)
@@ -218,6 +224,23 @@ def _source_from_subentry(
             entity_ids=data.get(CONF_ENTITY_ID) or None,
             default_tier=tier,
             colour=colour,
+        )
+    if kind == SOURCE_PATTERN:
+        return PatternSource(
+            hass,
+            subentry.subentry_id,
+            title,
+            patterns=list(data.get(CONF_PATTERNS, [])),
+            hues=[h if h == CONTRAST else int(h) for h in data.get(CONF_HUES, [])],
+            contrast=(
+                BLACK
+                if coordinator.config_entry.options.get(CONF_BOARD_COLOUR)
+                == BOARD_WHITE
+                else WHITE
+            ),
+            # Read lazily: the geometry is only known once the board has
+            # been read, which happens after the sources are registered.
+            geometry_getter=lambda: coordinator.geometry,
         )
     return None
 

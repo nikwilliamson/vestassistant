@@ -518,12 +518,6 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
     # ------------------------------------------------------------------
 
     @property
-    def current_text(self) -> str | None:
-        if self._displayed_decision is None:
-            return None
-        return self._displayed_decision.text
-
-    @property
     def displayed_decision(self) -> Decision | None:
         """The decision that describes what the board is actually showing.
 

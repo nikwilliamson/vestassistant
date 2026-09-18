@@ -41,11 +41,13 @@
         "data": {
           "summary_template": "Summary card text",
           "blend": "How attention and content share the board",
+          "board_colour": "Board colour",
           "forecast_entity": "Weather entity"
         },
         "data_description": {
           "summary_template": "Write n in curly braces where the count should go, as in the default.",
           "blend": "Alternate shows one thing that needs you, then one that does not. Attention first runs content only when nothing is pending.",
+          "board_colour": "Neither API reports it, and it decides whether white or black tiles show against the flaps.",
           "forecast_entity": "Which weather entity to read the forecast from. The forecast card shows nothing without one."
         }
       }
@@ -71,7 +73,7 @@
           "data_description": {
             "name": "What to call this set. Only you see it.",
             "colour": "The hue of the band down the left edge. Content messages have no band, so a colour on one does nothing.",
-            "entries": "One per line. They rotate in the order you write them."
+            "entries": "One message per box, rotating in the order you write them. A | starts a new row on the board; two in a row leave a blank one."
           }
         },
         "todo": {
@@ -92,10 +94,24 @@
             "tier": "Used when an entity does not set a 'tier' attribute of its own.",
             "colour": "Used when an entity does not set a 'colour' attribute of its own."
           }
+        },
+        "pattern": {
+          "title": "Colours and patterns",
+          "description": "Decorative fills for the board between messages. Each pattern you tick is one card in the content rotation. They drift once an hour, and Sun follows the time of day.",
+          "data": {
+            "name": "Name",
+            "patterns": "Patterns",
+            "hues": "Colours"
+          },
+          "data_description": {
+            "patterns": "Rainbow, Stripes, Wash and Checkerboard walk through your colours; Confetti and Mosaic scatter them; Frame is a border; Sun ignores them and paints dawn, day, dusk and night.",
+            "hues": "Leave empty for all six plus white or black, whichever shows on your board."
+          }
         }
       },
       "abort": { "reconfigure_successful": "Source updated." },
       "error": {
+        "no_patterns": "Tick at least one pattern.",
         "does_not_fit": "One or more messages do not fit your board, even shortened.",
         "invalid_character": "That message uses a character the board cannot show, or a character code that does not exist. Colour chips are the codes 63 to 68, each wrapped in braces."
       },
@@ -129,6 +145,35 @@
     "transport": {
       "options": { "local": "Local API (on your network)", "cloud": "Cloud API" }
     },
+    "hue": {
+      "options": {
+        "63": "Red",
+        "64": "Orange",
+        "65": "Yellow",
+        "66": "Green",
+        "67": "Blue",
+        "68": "Violet",
+        "contrast": "White or black, whichever shows on your board"
+      }
+    },
+    "board_colour": {
+      "options": {
+        "black": "Black",
+        "white": "White"
+      }
+    },
+    "pattern": {
+      "options": {
+        "rainbow": "Rainbow",
+        "stripes": "Stripes",
+        "wash": "Wash",
+        "checkerboard": "Checkerboard",
+        "frame": "Frame",
+        "confetti": "Confetti",
+        "mosaic": "Mosaic",
+        "sun": "Sun"
+      }
+    },
     "tier": {
       "options": {
         "critical": "Critical - takes the whole board, ignores quiet hours",
@@ -150,7 +195,8 @@
       "options": {
         "list": "Messages you type here",
         "todo": "Items from a to-do list",
-        "declared": "Messages carried by other entities"
+        "declared": "Messages carried by other entities",
+        "pattern": "Colours and patterns"
       }
     },
     "blend": {
