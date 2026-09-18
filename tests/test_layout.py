@@ -106,3 +106,29 @@ def test_geometry_inferred_from_grid_shape():
 def test_multiline_input_respects_explicit_breaks():
     r = fit("ONE\nTWO\nTHREE", NOTE, align="left", valign="top")
     assert [line.rstrip() for line in r.preview.splitlines()] == ["ONE", "TWO", "THREE"]
+
+
+class TestEncodingErrors:
+    def test_unsupported_character_is_reported_not_raised(self):
+        result = fit("HELLO*WORLD", NOTE)
+        assert result.fits is False
+        assert "*" in result.error
+
+    def test_unknown_character_code_is_reported(self):
+        result = fit("{99}", NOTE)
+        assert result.fits is False
+        assert "99" in result.error
+
+    def test_failed_fit_returns_a_blank_grid_of_the_right_shape(self):
+        result = fit("HELLO*WORLD", NOTE)
+        assert len(result.grid) == NOTE.rows
+        assert all(len(row) == NOTE.cols for row in result.grid)
+        assert all(code == 0 for row in result.grid for code in row)
+
+    def test_valid_text_has_no_error(self):
+        assert fit("HELLO", NOTE).error == ""
+
+    def test_colour_escapes_are_valid_input(self):
+        result = fit("{63}{66}AB", NOTE, align="left", valign="top")
+        assert result.error == ""
+        assert result.grid[0][:4] == [63, 66, 1, 2]

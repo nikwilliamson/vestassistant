@@ -60,6 +60,14 @@ class FitResult:
     rows_needed: int
     overflow: str = ""
     """The text that had to be dropped, if any."""
+    error: str = ""
+    """Why the text could not be encoded at all, if it could not.
+
+    ``encode`` raises on an unsupported character or an unknown code in
+    braces. Callers sit on three different paths - authoring, rendering and
+    the validate service - and each wants to react differently, so this is
+    reported rather than thrown.
+    """
 
     @property
     def preview(self) -> str:
@@ -120,7 +128,15 @@ def fit(
     """
     lines: list[list[int]] = []
     for source_line in text.splitlines() or [""]:
-        codes = encode(source_line.upper())
+        try:
+            codes = encode(source_line.upper())
+        except ValueError as err:
+            return FitResult(
+                grid=blank(geometry),
+                fits=False,
+                rows_needed=0,
+                error=str(err),
+            )
         lines.extend(_wrap(codes, geometry.cols))
 
     rows_needed = len(lines)
