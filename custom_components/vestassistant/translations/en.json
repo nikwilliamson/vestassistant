@@ -43,7 +43,7 @@
           "forecast_entity": "Weather entity"
         },
         "data_description": {
-          "summary_template": "Use '{n}' for the count.",
+          "summary_template": "Write n in curly braces where the count should go, as in the default.",
           "blend": "Alternate shows one thing that needs you, then one that does not. Attention first runs content only when nothing is pending.",
           "forecast_entity": "Which weather entity to read the forecast from. The forecast card shows nothing without one."
         }

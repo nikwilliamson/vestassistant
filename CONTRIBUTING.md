@@ -33,10 +33,13 @@ gh release create v0.3.0 --title v0.3.0 --notes "..."
 
 ## Two things that have bitten before
 
-**Braces in `strings.json` are ICU placeholders.** The frontend will try to
-interpolate anything in `{...}` and throw `MISSING_VALUE` if nothing supplies
-it, and hassfest rejects any that is not a valid identifier. Escape a literal
-brace by quoting it: `'{n}'`.
+**Never put a literal brace in `strings.json`.** There is no way to escape
+one. The frontend treats `{...}` as an ICU placeholder and throws
+`MISSING_VALUE` if nothing supplies it; hassfest separately rejects both a
+placeholder that is not a valid identifier and any placeholder wrapped in
+single quotes, which is the usual ICU escape. Write the text without braces.
+The only ones allowed are real placeholders the code supplies through
+`description_placeholders`, like `{board}`.
 
 **`strings.json` and `translations/en.json` must stay identical.** Edit them as
 text rather than round-tripping through `json.dumps`, which reformats the whole
