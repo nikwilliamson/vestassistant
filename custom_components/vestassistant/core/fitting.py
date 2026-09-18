@@ -50,7 +50,8 @@ def _replace_words(text: str, table: dict[str, str]) -> str:
 
     if not table:
         return text
-    pattern = r"\b(?:" + "|".join(sorted(map(re.escape, table), key=len, reverse=True)) + r")\b"
+    words = sorted(map(re.escape, table), key=len, reverse=True)
+    pattern = r"\b(?:" + "|".join(words) + r")\b"
     return re.sub(pattern, swap, text)
 
 

@@ -10,8 +10,6 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "custom_components" / "vestassistant"),
 )
 
-from vesta.chars import encode
-
 from core.chips import (
     BLUE,
     GREEN,
@@ -24,6 +22,7 @@ from core.chips import (
     row,
 )
 from core.layout import FLAGSHIP, NOTE, fit
+from vesta.chars import encode
 
 
 def codes(text: str, geometry):
