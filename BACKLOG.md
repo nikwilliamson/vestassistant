@@ -17,9 +17,12 @@ Still open:
 - **Register the brand with `home-assistant/brands`.** The HACS check is
   satisfied by the copies now shipped in
   `custom_components/vestassistant/brand/`, but only the brands repo makes the
-  icon appear in Home Assistant's own UI. That PR wants `icon.png` at 256x256
-  and `icon@2x.png` at 512x512; ours is a single 512x512, so it needs a resize
-  first.
+  icon appear in Home Assistant's own UI. The assets are ready: `brand/` holds
+  `icon.png` at 256x256 and `icon@2x.png` at 512x512, trimmed and squared, which
+  is exactly what the PR wants. There is no `logo.png` on purpose - the logo
+  would be the same artwork as the icon, and brands says to submit only the
+  icons in that case. `brand/source.png` is the full-resolution original the
+  two are generated from.
 - **`abort.reconfigure_successful` in `config_subentries.source` is dead.**
   `SourceSubentryFlow` has no reconfigure step, so nothing can emit it. Either
   add the step or drop the string.
@@ -33,7 +36,7 @@ Bronze blockers:
 
 - `config-flow-test-coverage`
 - `test-coverage`
-- `brands` — needs a PR to home-assistant/brands (icon and logo are in `brand/`)
+- `brands` — assets are ready in `brand/`; needs the PR to home-assistant/brands
 
 Resolved: `docs-removal-instructions` — see "Removing it" in the README.
 
