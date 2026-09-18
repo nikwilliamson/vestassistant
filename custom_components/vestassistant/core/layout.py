@@ -195,7 +195,12 @@ def _frame(
     grid = [[chrome.colour] * geometry.cols for _ in range(geometry.rows)]
     for r, source in enumerate(inner):
         for c, code in enumerate(source):
-            grid[r + top][c + left] = code
+            # On a geometry too small for the inset to actually fit (not
+            # reachable with a real board today), clamp rather than index
+            # past the frame we just painted.
+            row_i = min(r + top, geometry.rows - 1)
+            col_i = min(c + left, geometry.cols - 1)
+            grid[row_i][col_i] = code
     return grid
 
 
