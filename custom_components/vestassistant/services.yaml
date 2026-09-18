@@ -9,10 +9,6 @@ add_item:
       example: STOVE LEFT ON. GO CHECK IT.
       selector:
         text:
-    cards:
-      example: '["WHY THE LONG FACE", "IT IS A HORSE"]'
-      selector:
-        object:
     tier:
       default: content
       selector:

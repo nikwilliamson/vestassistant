@@ -25,25 +25,6 @@ state never arrives. `item_id` is idempotent: calling `add_item` twice with
 the same one updates rather than duplicating, which is the de-duplication
 every caller would otherwise hand-roll.
 
-## A message too long for one board
-
-A Vestaboard Note is three rows of fifteen characters and very little survives
-that, so an item can be several cards. They play in order and nothing is ever
-interleaved between them.
-
-```yaml
-actions:
-  - action: vestassistant.add_item
-    data:
-      item_id: joke
-      cards:
-        - "WHY DID THE SCARECROW"
-        - "WIN AN AWARD?"
-        - "HE WAS OUTSTANDING"
-```
-
-In a message list, a pipe does the same thing: `SETUP | PUNCHLINE`.
-
 ## Choosing the colour per item
 
 ```yaml

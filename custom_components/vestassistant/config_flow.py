@@ -296,14 +296,57 @@ class VestassistantOptionsFlow(OptionsFlow):
 
 
 class SourceSubentryFlow(ConfigSubentryFlow):
-    """Add a source: a list, a to-do list, or entities that declare cards."""
+    """Add or edit a source.
+
+    The same three forms serve both: creating one starts at ``user`` to pick
+    a kind, editing one jumps straight to the form for the kind it already
+    is. Without the edit path a message list was add-or-delete, so fixing a
+    typo meant retyping every message in it.
+    """
+
+    _reconfiguring = False
+
+    # -- shared plumbing --------------------------------------------------
+
+    def _current(self) -> dict[str, Any]:
+        """The values to prefill, empty when creating."""
+        if not self._reconfiguring:
+            return {}
+        return dict(self._get_reconfigure_subentry().data)
+
+    def _name(self, fallback: str) -> str:
+        if not self._reconfiguring:
+            return fallback
+        return self._get_reconfigure_subentry().title or fallback
+
+    def _save(self, title: str, data: dict[str, Any]) -> SubentryFlowResult:
+        if self._reconfiguring:
+            return self.async_update_and_abort(
+                self._get_entry(),
+                self._get_reconfigure_subentry(),
+                data=data,
+                title=title,
+            )
+        return self.async_create_entry(title=title, data=data)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        self._reconfiguring = True
+        kind = self._get_reconfigure_subentry().data.get(CONF_SOURCE_TYPE)
+        if kind == SOURCE_TODO:
+            return await self.async_step_todo()
+        if kind == SOURCE_DECLARED:
+            return await self.async_step_declared()
+        return await self.async_step_list()
+
+    # -- picking a kind ---------------------------------------------------
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         if user_input is not None:
             kind = user_input[CONF_SOURCE_TYPE]
-            self._kind = kind
             if kind == SOURCE_LIST:
                 return await self.async_step_list()
             if kind == SOURCE_TODO:
@@ -327,10 +370,13 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             ),
         )
 
+    # -- the three kinds --------------------------------------------------
+
     async def async_step_list(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         errors: dict[str, str] = {}
+        current = self._current()
         if user_input is not None:
             entries = [
                 line.strip()
@@ -339,36 +385,31 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             ]
             # Checked here rather than at render time: finding out a message
             # does not fit because it is garbled on the wall is the bad
-            # version of this feedback loop. The rendered card carries
-            # band, so validation has to reserve the same space or a
-            # message can validate here and still get truncated on the wall.
-            geometry = self._geometry()
+            # version of this feedback loop. The rendered message carries a
+            # band, so validation has to reserve the same space or a message
+            # can pass here and still get shortened on the wall.
             raw_colour = user_input.get(CONF_COLOUR)
             band = resolve_band(
                 Item(
                     id="validate",
                     source="validate",
-                    cards=("",),
+                    text="",
                     tier=user_input[CONF_TIER],
-                    # The selector hands back a string ("66"); Item/Band
+                    # The selector hands back a string ("66"); Item and Band
                     # want an int.
                     colour=int(raw_colour) if raw_colour is not None else None,
                 ),
                 TierSet(),
             )
-            results = [
-                fit(card.strip(), geometry, band=band)
-                for line in entries
-                for card in line.split("|")
-            ]
+            results = [fit(line, self._geometry(), band=band) for line in entries]
             if any(r.error for r in results):
                 errors[CONF_ENTRIES] = "invalid_character"
             elif any(not r.fits for r in results):
                 errors[CONF_ENTRIES] = "does_not_fit"
             else:
-                return self.async_create_entry(
-                    title=user_input["name"],
-                    data={
+                return self._save(
+                    user_input["name"],
+                    {
                         CONF_SOURCE_TYPE: SOURCE_LIST,
                         CONF_ENTRIES: entries,
                         CONF_TIER: user_input[CONF_TIER],
@@ -380,13 +421,17 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             step_id="list",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="Typed messages"): str,
-                    vol.Required(CONF_TIER, default=TIER_CONTENT): TIER_SELECTOR,
+                    vol.Required("name", default=self._name("Typed messages")): str,
+                    vol.Required(
+                        CONF_TIER, default=current.get(CONF_TIER, TIER_CONTENT)
+                    ): TIER_SELECTOR,
                     vol.Optional(
                         CONF_COLOUR,
-                        description={"suggested_value": None},
+                        description={"suggested_value": current.get(CONF_COLOUR)},
                     ): COLOUR_SELECTOR,
-                    vol.Required(CONF_ENTRIES, default=[]): selector.TextSelector(
+                    vol.Required(
+                        CONF_ENTRIES, default=current.get(CONF_ENTRIES, [])
+                    ): selector.TextSelector(
                         selector.TextSelectorConfig(multiline=True, multiple=True)
                     ),
                 }
@@ -398,10 +443,11 @@ class SourceSubentryFlow(ConfigSubentryFlow):
     async def async_step_todo(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
+        current = self._current()
         if user_input is not None:
-            return self.async_create_entry(
-                title=user_input["name"],
-                data={
+            return self._save(
+                user_input["name"],
+                {
                     CONF_SOURCE_TYPE: SOURCE_TODO,
                     CONF_ENTITY_ID: user_input[CONF_ENTITY_ID],
                     CONF_TIER: user_input[CONF_TIER],
@@ -412,14 +458,19 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             step_id="todo",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="To-do"): str,
-                    vol.Required(CONF_ENTITY_ID): selector.EntitySelector(
+                    vol.Required("name", default=self._name("To-do")): str,
+                    vol.Required(
+                        CONF_ENTITY_ID,
+                        description={"suggested_value": current.get(CONF_ENTITY_ID)},
+                    ): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="todo")
                     ),
-                    vol.Required(CONF_TIER, default=TIER_TASK): TIER_SELECTOR,
+                    vol.Required(
+                        CONF_TIER, default=current.get(CONF_TIER, TIER_TASK)
+                    ): TIER_SELECTOR,
                     vol.Optional(
                         CONF_COLOUR,
-                        description={"suggested_value": None},
+                        description={"suggested_value": current.get(CONF_COLOUR)},
                     ): COLOUR_SELECTOR,
                 }
             ),
@@ -428,10 +479,11 @@ class SourceSubentryFlow(ConfigSubentryFlow):
     async def async_step_declared(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
+        current = self._current()
         if user_input is not None:
-            return self.async_create_entry(
-                title=user_input["name"],
-                data={
+            return self._save(
+                user_input["name"],
+                {
                     CONF_SOURCE_TYPE: SOURCE_DECLARED,
                     CONF_ENTITY_ID: user_input.get(CONF_ENTITY_ID) or [],
                     CONF_TIER: user_input[CONF_TIER],
@@ -442,17 +494,24 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             step_id="declared",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="Entity messages"): str,
-                    vol.Optional(CONF_ENTITY_ID): selector.EntitySelector(
+                    vol.Required("name", default=self._name("Entity messages")): str,
+                    vol.Optional(
+                        CONF_ENTITY_ID,
+                        description={
+                            "suggested_value": current.get(CONF_ENTITY_ID) or None
+                        },
+                    ): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain=["binary_sensor", "input_boolean", "sensor"],
                             multiple=True,
                         )
                     ),
-                    vol.Required(CONF_TIER, default=TIER_TASK): TIER_SELECTOR,
+                    vol.Required(
+                        CONF_TIER, default=current.get(CONF_TIER, TIER_TASK)
+                    ): TIER_SELECTOR,
                     vol.Optional(
                         CONF_COLOUR,
-                        description={"suggested_value": None},
+                        description={"suggested_value": current.get(CONF_COLOUR)},
                     ): COLOUR_SELECTOR,
                 }
             ),

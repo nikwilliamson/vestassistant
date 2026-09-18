@@ -65,7 +65,6 @@ SERVICE_VALIDATE: Final = "validate"
 
 ATTR_ITEM_ID: Final = "item_id"
 ATTR_MESSAGE: Final = "message"
-ATTR_CARDS: Final = "cards"
 ATTR_TIER: Final = "tier"
 ATTR_COLOUR: Final = "colour"
 ATTR_TTL: Final = "ttl"

@@ -17,7 +17,6 @@ from .base import Source
 ATTR_MESSAGE = "message"
 ATTR_TIER = "tier"
 ATTR_COLOUR = "colour"
-ATTR_CARDS = "cards"
 ATTR_TTL = "ttl"
 
 
@@ -100,7 +99,7 @@ class TodoSource(Source):
             Item(
                 id=uid,
                 source=self.source_id,
-                cards=(summary,),
+                text=summary,
                 tier=self.tier,
                 colour=self.colour,
                 meta={"source_name": self.name, "entity_id": self.entity_id},
@@ -173,17 +172,14 @@ class DeclaredSource(Source):
             state = self.hass.states.get(entity_id)
             if state is None or state.state != "on":
                 continue
-            cards = state.attributes.get(ATTR_CARDS)
-            if not cards:
-                message = state.attributes.get(ATTR_MESSAGE)
-                if not message:
-                    continue
-                cards = [message]
+            message = state.attributes.get(ATTR_MESSAGE)
+            if not message:
+                continue
             out.append(
                 Item(
                     id=entity_id,
                     source=self.source_id,
-                    cards=tuple(str(c) for c in cards),
+                    text=str(message),
                     tier=str(state.attributes.get(ATTR_TIER, self.default_tier)),
                     colour=_as_colour(state.attributes.get(ATTR_COLOUR), self.colour),
                     meta={"source_name": self.name, "entity_id": entity_id},
@@ -218,7 +214,7 @@ class ServiceSource(Source):
     def add(
         self,
         item_id: str,
-        cards: list[str],
+        text: str,
         tier: str = TIER_CONTENT,
         *,
         now: datetime,
@@ -230,7 +226,7 @@ class ServiceSource(Source):
         # Idempotent on id: calling add twice updates rather than duplicating,
         # which is the de-duplication every caller would otherwise hand-roll.
         self._items[item_id] = {
-            "cards": list(cards),
+            "text": text,
             "tier": tier,
             "colour": colour,
             "created": now.isoformat(),
@@ -266,7 +262,10 @@ class ServiceSource(Source):
                 Item(
                     id=item_id,
                     source=self.source_id,
-                    cards=tuple(raw["cards"]),
+                    # Items stored before multi-card was removed kept a
+                    # list; take the first and drop the rest rather than
+                    # failing to restore them at all.
+                    text=raw.get("text") or (raw.get("cards") or [""])[0],
                     tier=raw.get("tier", TIER_CONTENT),
                     colour=raw.get("colour"),
                     created=_parse(raw.get("created")),

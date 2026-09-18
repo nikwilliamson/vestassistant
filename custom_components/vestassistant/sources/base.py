@@ -62,10 +62,7 @@ class Source(abc.ABC):
 class ListSource(Source):
     """A list of messages typed into the integration's configuration.
 
-    Each entry is a list of cards rather than a bare string, even though most
-    entries will have exactly one. A joke's setup and punchline are two cards
-    of one item, and making that the shape from the start avoids migrating
-    everybody's config the first time someone wants one.
+    One entry is one message, and one message is one boardful.
     """
 
     def __init__(
@@ -84,15 +81,15 @@ class ListSource(Source):
 
     def items(self, now: datetime) -> list[Item]:
         out: list[Item] = []
-        for index, cards in enumerate(self.entries):
-            cards = [c for c in cards if c and c.strip()]
-            if not cards:
+        for index, entry in enumerate(self.entries):
+            text = entry.strip()
+            if not text:
                 continue
             out.append(
                 Item(
                     id=str(index),
                     source=self.source_id,
-                    cards=tuple(cards),
+                    text=text,
                     tier=self.tier,
                     colour=self.colour,
                     meta={"source_name": self.name},

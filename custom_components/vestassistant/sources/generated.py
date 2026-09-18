@@ -59,7 +59,7 @@ class ClockSource(Source):
             Item(
                 id="now",
                 source=self.source_id,
-                cards=(clock_text(now),),
+                text=clock_text(now),
                 tier=self.tier,
                 refresh=self.refresh,
                 meta={"source_name": self.name},
@@ -156,7 +156,7 @@ class ForecastSource(Source):
             Item(
                 id="today",
                 source=self.source_id,
-                cards=(text,),
+                text=text,
                 tier=self.tier,
                 meta={"source_name": self.name, "entity_id": self.entity_id},
             )

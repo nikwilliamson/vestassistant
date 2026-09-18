@@ -214,7 +214,6 @@ def decide(
     arrived = [i for i in ordered if i.key not in known]
 
     chosen: Item | None = None
-    card = 0
     new_state = state.with_(frozen=False)
     reason = ""
 
@@ -224,7 +223,6 @@ def decide(
     if trigger is Trigger.REFRESH and current is not None:
         return _render(
             current,
-            state.current_card,
             new_state.with_(known_keys=tuple(by_key)),
             now=now,
             config=config,
@@ -253,8 +251,7 @@ def decide(
             # rotation must not silently extend what is already up.
             return _render(
                 current,
-                state.current_card,
-                new_state.with_(known_keys=tuple(by_key)),
+                    new_state.with_(known_keys=tuple(by_key)),
                 now=now,
                 config=config,
                 tiers=tiers,
@@ -263,21 +260,9 @@ def decide(
                 hold=True,
             )
 
-    # 8. Multi-card items play to the end before anything else gets a turn.
-    if (
-        chosen is None
-        and current is not None
-        and trigger is Trigger.DWELL
-        and state.current_card + 1 < len(current.cards)
-    ):
-        chosen = current
-        card = state.current_card + 1
-        reason = "next card of the current item"
-
     # 9. Coming back from a restart, resume rather than jump.
     if chosen is None and trigger is Trigger.START and current is not None:
         chosen = current
-        card = min(state.current_card, len(current.cards) - 1)
         reason = "resumed after restart"
 
     # 10. Otherwise advance through the blend.
@@ -300,10 +285,8 @@ def decide(
                 summary = _summary_item(attention_count, config, tiers)
                 return _render(
                     summary,
-                    0,
                     state.with_(
                         current_key=SUMMARY_KEY,
-                        current_card=0,
                         last_was_attention=True,
                         known_keys=tuple(by_key),
                         frozen=False,
@@ -330,7 +313,6 @@ def decide(
     new_state = new_state.with_(known_keys=tuple(by_key))
     return _render(
         chosen,
-        card,
         new_state,
         now=now,
         config=config,
@@ -342,7 +324,6 @@ def decide(
 
 def _render(
     item: Item,
-    card: int,
     state: CursorState,
     *,
     now: datetime,
@@ -352,7 +333,7 @@ def _render(
     reason: str,
     hold: bool = False,
 ) -> Decision:
-    text = item.card(card)
+    text = item.text
     tier: TierPolicy = tiers.get(item.tier)
     dwell = item.dwell or tier.dwell or config.dwell
     unchanged = text == state.last_rendered
@@ -368,13 +349,11 @@ def _render(
     return Decision(
         state=state.with_(
             current_key=item.key,
-            current_card=card,
             shown_at=state.shown_at if hold else now,
             last_rendered=text,
             last_written_at=state.last_written_at if unchanged else now,
         ),
         item=item,
-        card_index=card,
         text=text,
         # Re-posting text the board already shows costs a physical flip and
         # fifteen seconds of rate limit for no information.
@@ -396,7 +375,7 @@ def _summary_item(count: int, config: SchedulerConfig, tiers) -> Item:
     return Item(
         id=SUMMARY_ID,
         source=SUMMARY_SOURCE,
-        cards=(text,),
+        text=text,
         tier=top.name,
     )
 

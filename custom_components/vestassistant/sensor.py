@@ -49,7 +49,7 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
         live = self.coordinator.decision
         item = displayed.item if displayed else None
         queue = [
-            {"id": i.id, "source": i.source, "tier": i.tier, "text": i.cards[0]}
+            {"id": i.id, "source": i.source, "tier": i.tier, "text": i.text}
             for i in self.coordinator.collect(
                 self.coordinator.cursor.shown_at or dt_now()
             )
@@ -59,8 +59,6 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
             "source_id": item.source if item else None,
             "item_id": item.id if item else None,
             "tier": item.tier if item else None,
-            "card": displayed.card_index + 1 if item else None,
-            "cards": len(item.cards) if item else None,
             "since": self.coordinator.cursor.shown_at,
             "next_at": live.next_wake if live else None,
             "reason": live.reason if live else "",

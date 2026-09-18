@@ -167,15 +167,14 @@ class TierSet:
 class Item:
     """One thing the board can show.
 
-    ``cards`` is a tuple because an item may need more than one board to say
-    what it says - a joke's setup and punchline, for instance. The scheduler
-    always plays an item's cards in order and never interleaves another item
-    between them.
+    One item is one boardful. A message that does not fit is shortened, and
+    failing that truncated - it is never continued onto a second board, so
+    what you write is what somebody standing in the room reads in one go.
     """
 
     id: str
     source: str
-    cards: tuple[str, ...]
+    text: str
     tier: str = TIER_CONTENT
     created: datetime | None = None
     expires: datetime | None = None
@@ -199,8 +198,8 @@ class Item:
     def __post_init__(self) -> None:
         if not self.id:
             raise ValueError("item id is required")
-        if not self.cards:
-            raise ValueError(f"item {self.id!r} has no cards")
+        if not self.text:
+            raise ValueError(f"item {self.id!r} has no text")
 
     @property
     def key(self) -> str:
@@ -209,9 +208,6 @@ class Item:
 
     def is_expired(self, now: datetime) -> bool:
         return self.expires is not None and self.expires <= now
-
-    def card(self, index: int) -> str:
-        return self.cards[index % len(self.cards)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +221,6 @@ class CursorState:
     """
 
     current_key: str | None = None
-    current_card: int = 0
     shown_at: datetime | None = None
     last_rendered: str | None = None
     last_written_at: datetime | None = None
@@ -248,7 +243,6 @@ class Decision:
 
     state: CursorState
     item: Item | None = None
-    card_index: int = 0
     text: str | None = None
     write: bool = False
     """False means the board already shows this - skip the write, keep the flap

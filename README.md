@@ -58,13 +58,18 @@ see [Entities](#entities). Three things have no sensible entity and live in
 
 | Source | |
 | --- | --- |
-| **Messages you type here** | One per line, rotating in the order you write them. Checked against your board as you save, so you find out something does not fit while you can still reword it. Split a long message across several boards with a pipe: `SETUP \| PUNCHLINE` |
+| **Messages you type here** | One per line, rotating in the order you write them. This is the resting state of the board — what shows when nothing needs you. Checked against your board as you save, so you find out something does not fit while you can still reword it |
 | **Items from a to-do list** | Every incomplete item becomes a message. Tick it off and it leaves the board |
 | **Messages carried by other entities** | For wording that belongs next to whatever raises it. Any entity that is `on` and has a `message` attribute becomes a message while it stays on — no automation needed. See [docs/automations.md](docs/automations.md) |
 
-Each source has a **tier** and an optional **colour**. Automations can also
-push messages in with `vestassistant.add_item`, and you can type one straight
-to the board with `text.*_message`.
+Each source has a **tier** and an optional **colour**, and every source can be
+edited after the fact — click it under the integration to change the messages,
+the tier or the colour. Automations can also push messages in with
+`vestassistant.add_item`, and you can type one straight to the board with
+`text.*_message`.
+
+One message is one boardful. A message that will not fit is shortened, and
+failing that truncated; it is never continued onto a second board.
 
 The clock and forecast cards are switches rather than sources — there is only
 ever one of each and nothing to name.
@@ -104,7 +109,8 @@ Colours are ordinary character codes, so they work inline in any message too:
 
 Rather than cutting a message off, Vestassistant shortens it — `TOMORROW`
 becomes `TMRW`, `AND` becomes `&`, articles go last of all — and truncates
-only when none of that is enough.
+only when none of that is enough. A typed message list rejects anything that
+will not fit at all, so you find out while you can still reword it.
 
 ## Entities
 

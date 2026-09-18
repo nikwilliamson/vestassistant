@@ -31,11 +31,11 @@ from core.scheduler import SUMMARY_ID, decide, in_quiet_hours
 NOW = datetime(2026, 9, 17, 12, 0, 0)
 
 
-def item(id_, tier=TIER_CONTENT, cards=None, source="test", **kw):
+def item(id_, tier=TIER_CONTENT, text=None, source="test", **kw):
     return Item(
         id=id_,
         source=source,
-        cards=tuple(cards or [id_.upper()]),
+        text=text or id_.upper(),
         tier=tier,
         created=kw.pop("created", NOW),
         **kw,
@@ -226,19 +226,19 @@ def test_removing_the_displayed_item_advances():
 
 
 # --------------------------------------------------------------------------
-# multi-card items
+# one item is one boardful
 # --------------------------------------------------------------------------
 
 
-def test_multi_card_item_plays_in_order_without_interruption():
-    items = [item("joke", cards=["WHY THE LONG FACE", "IT IS A HORSE"]), item("other")]
-    state = CursorState()
-    first = run(items, state=state)
-    assert first.text == "WHY THE LONG FACE"
+def test_an_item_is_a_single_message():
+    # Multi-card items were removed: a message that does not fit is shortened
+    # or truncated, never continued onto a second board. Every tick must
+    # therefore advance to a different item rather than to a second part.
+    items = [item("first"), item("second")]
+    first = run(items, state=CursorState())
     second = run(items, state=first.state)
-    assert second.text == "IT IS A HORSE", "punchline must follow its setup"
-    third = run(items, state=second.state)
-    assert third.text == "OTHER"
+    assert first.text == "FIRST"
+    assert second.text == "SECOND"
 
 
 # --------------------------------------------------------------------------
@@ -445,7 +445,7 @@ FIVE = timedelta(minutes=5)
 
 
 def clock(text="11:00 PM"):
-    return item("now", source="clock", cards=[text], refresh=FIVE)
+    return item("now", source="clock", text=text, refresh=FIVE)
 
 
 def test_refresh_interval_brings_the_wake_forward():
@@ -523,25 +523,25 @@ def test_refresh_after_the_refreshing_item_is_gone_advances_normally():
 
 class TestBandResolution:
     def test_critical_gets_a_two_column_red_band(self):
-        item = Item(id="a", source="s", cards=("HI",), tier=TIER_CRITICAL)
+        item = Item(id="a", source="s", text="HI", tier=TIER_CRITICAL)
         assert resolve_band(item, TierSet()) == Band(colour=63, width=2)
 
     def test_task_gets_a_one_column_orange_band(self):
-        item = Item(id="a", source="s", cards=("HI",), tier=TIER_TASK)
+        item = Item(id="a", source="s", text="HI", tier=TIER_TASK)
         assert resolve_band(item, TierSet()) == Band(colour=64, width=1)
 
     def test_content_gets_nothing(self):
-        item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT)
+        item = Item(id="a", source="s", text="HI", tier=TIER_CONTENT)
         assert resolve_band(item, TierSet()) is None
 
     def test_an_item_can_override_the_hue(self):
-        item = Item(id="a", source="s", cards=("HI",), tier=TIER_TASK, colour=66)
+        item = Item(id="a", source="s", text="HI", tier=TIER_TASK, colour=66)
         assert resolve_band(item, TierSet()) == Band(colour=66, width=1)
 
     def test_an_override_does_not_give_content_a_band(self):
         # Severity decides whether there is a band at all; the colour only
         # decides what hue it is.
-        item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT, colour=66)
+        item = Item(id="a", source="s", text="HI", tier=TIER_CONTENT, colour=66)
         assert resolve_band(item, TierSet()) is None
 
     def test_banded_tier_without_colour_draws_nothing_until_item_supplies_one(self):
@@ -560,8 +560,8 @@ class TestBandResolution:
                 ),
             )
         )
-        without_colour = Item(id="a", source="s", cards=("HI",), tier="dim")
+        without_colour = Item(id="a", source="s", text="HI", tier="dim")
         assert resolve_band(without_colour, tiers) is None
 
-        with_colour = Item(id="a", source="s", cards=("HI",), tier="dim", colour=65)
+        with_colour = Item(id="a", source="s", text="HI", tier="dim", colour=65)
         assert resolve_band(with_colour, tiers) == Band(colour=65, width=1)

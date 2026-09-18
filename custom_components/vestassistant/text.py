@@ -15,6 +15,14 @@ from .entity import VestassistantEntity
 #: far less than that, so the real limit is the board's own capacity.
 HA_MAX = 255
 
+#: The characters a Vestaboard can physically show, plus braces for colour
+#: codes like {63}. Lower case is allowed because the board uppercases
+#: everything anyway. Built by hand from ``vesta.chars.PRINTABLE`` rather than
+#: generated at import time, so a change to that table is a visible diff here.
+#: The frontend rejects anything outside it as you type; laying the message
+#: out is still what decides whether it actually fits.
+PATTERN = r"""[ A-Za-z!"#$%&'()+,\-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ°{}]*"""
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -34,10 +42,13 @@ class MessageText(VestassistantEntity, TextEntity):
 
     _attr_mode = TextMode.TEXT
     _attr_native_min = 0
+    _attr_pattern = PATTERN
 
     def __init__(self, coordinator) -> None:
         super().__init__(coordinator, "message")
         geometry = coordinator.geometry
+        # A Note holds 45 cells and a Flagship 132, so the ceiling follows the
+        # board rather than Home Assistant's generic 255.
         self._attr_native_max = min(HA_MAX, geometry.capacity) if geometry else HA_MAX
 
     @property

@@ -60,7 +60,7 @@
         },
         "list": {
           "title": "Messages you type",
-          "description": "One message per line. Split a long one across several boards with a pipe: SETUP | PUNCHLINE. Every line is checked against your {board} before it is saved, so you find out something does not fit while you can still reword it.",
+          "description": "One message per line, each one a whole boardful. Every line is checked against your {board} before it is saved, so you find out something does not fit while you can still reword it.",
           "data": {
             "name": "Name",
             "tier": "Tier",
@@ -93,8 +93,9 @@
           }
         }
       },
+      "abort": { "reconfigure_successful": "Source updated." },
       "error": {
-        "does_not_fit": "One or more messages do not fit your board.",
+        "does_not_fit": "One or more messages do not fit your board, even shortened.",
         "invalid_character": "That message uses a character the board cannot show, or a character code that does not exist. Colour chips are the codes 63 to 68, each wrapped in braces."
       },
       "entry_type": "Source"
@@ -165,7 +166,6 @@
       "fields": {
         "item_id": { "name": "ID", "description": "Your own identifier. Reuse it to update, and pass it to Remove item." },
         "message": { "name": "Message", "description": "A single board's worth of text." },
-        "cards": { "name": "Cards", "description": "Several boards shown in order, for a message too long for one. Never interleaved with anything else." },
         "tier": { "name": "Tier", "description": "How urgently this competes for the board." },
         "colour": { "name": "Colour", "description": "The colour of this item's frame. Leave blank to use the source's colour." },
         "ttl": { "name": "Expire after", "description": "Remove automatically after this long." },

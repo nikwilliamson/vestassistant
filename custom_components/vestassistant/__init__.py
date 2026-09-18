@@ -22,7 +22,6 @@ from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from .const import (
-    ATTR_CARDS,
     ATTR_COLOUR,
     ATTR_DURATION,
     ATTR_EXPIRE_WHEN,
@@ -187,7 +186,7 @@ def _source_from_subentry(hass: HomeAssistant, subentry) -> object | None:
     colour = int(colour) if colour is not None else None
     if kind == SOURCE_LIST:
         entries = [
-            [part.strip() for part in str(line).split("|")]
+            str(line).strip()
             for line in data.get(CONF_ENTRIES, [])
             if str(line).strip()
         ]
@@ -228,8 +227,7 @@ async def async_unload_entry(
 ADD_ITEM_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ITEM_ID): cv.string,
-        vol.Exclusive(ATTR_MESSAGE, "content"): cv.string,
-        vol.Exclusive(ATTR_CARDS, "content"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Required(ATTR_MESSAGE): cv.string,
         vol.Optional(ATTR_TIER, default=TIER_CONTENT): cv.string,
         vol.Optional(ATTR_COLOUR): vol.All(
             vol.Coerce(int), vol.Range(min=63, max=68)
@@ -286,7 +284,6 @@ def _async_register_services(hass: HomeAssistant) -> None:
         return
 
     async def _add_item(call: ServiceCall) -> None:
-        cards = call.data.get(ATTR_CARDS) or [call.data[ATTR_MESSAGE]]
         expire = call.data.get(ATTR_EXPIRE_WHEN)
         for coordinator in _coordinators(hass, call):
             source = coordinator._service_source
@@ -294,7 +291,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 continue
             source.add(
                 call.data[ATTR_ITEM_ID],
-                cards,
+                call.data[ATTR_MESSAGE],
                 call.data.get(ATTR_TIER, TIER_CONTENT),
                 now=dt_util.now(),
                 ttl=call.data.get(ATTR_TTL),
@@ -342,7 +339,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 Item(
                     id="validate",
                     source="validate",
-                    cards=("",),
+                    text="",
                     tier=call.data[ATTR_TIER],
                     colour=call.data.get(ATTR_COLOUR),
                 ),

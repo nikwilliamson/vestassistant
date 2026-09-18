@@ -502,7 +502,6 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
 def _cursor_to_dict(cursor: CursorState) -> dict:
     return {
         "current_key": cursor.current_key,
-        "current_card": cursor.current_card,
         "shown_at": cursor.shown_at.isoformat() if cursor.shown_at else None,
         "last_rendered": cursor.last_rendered,
         "attention_key": cursor.attention_key,
@@ -518,7 +517,6 @@ def _cursor_from_dict(data: dict | None) -> CursorState:
     shown = data.get("shown_at")
     return CursorState(
         current_key=data.get("current_key"),
-        current_card=data.get("current_card", 0),
         shown_at=datetime.fromisoformat(shown) if shown else None,
         # last_rendered is deliberately not restored: we cannot be sure the
         # board still shows it after a restart, and a redundant write is
