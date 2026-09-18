@@ -1,0 +1,21 @@
+{
+  "entity": {
+    "sensor": {
+      "current_item": { "default": "mdi:message-text" },
+      "attention_count": { "default": "mdi:bell-badge" }
+    },
+    "binary_sensor": {
+      "quiet_hours": { "default": "mdi:sleep", "state": { "off": "mdi:sleep-off" } }
+    },
+    "switch": { "rotation": { "default": "mdi:rotate-right" } },
+    "number": { "dwell": { "default": "mdi:timer-outline" } },
+    "button": { "next": { "default": "mdi:skip-next" } }
+  },
+  "services": {
+    "add_item": "mdi:playlist-plus",
+    "remove_item": "mdi:playlist-remove",
+    "next": "mdi:skip-next",
+    "pin": "mdi:pin",
+    "validate": "mdi:ruler"
+  }
+}

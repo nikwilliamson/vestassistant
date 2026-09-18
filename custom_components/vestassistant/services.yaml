@@ -1,0 +1,90 @@
+add_item:
+  fields:
+    item_id:
+      required: true
+      example: stove_left_on
+      selector:
+        text:
+    message:
+      example: STOVE LEFT ON. GO CHECK IT.
+      selector:
+        text:
+    cards:
+      example: '["WHY THE LONG FACE", "IT IS A HORSE"]'
+      selector:
+        object:
+    tier:
+      default: content
+      selector:
+        select:
+          translation_key: tier
+          options: [critical, task, content]
+    ttl:
+      example: "06:00:00"
+      selector:
+        duration:
+    expire_when:
+      example: "{{ is_state('binary_sensor.range_left_on', 'off') }}"
+      selector:
+        template:
+    entry_id:
+      selector:
+        config_entry:
+          integration: vestassistant
+
+remove_item:
+  fields:
+    item_id:
+      required: true
+      example: stove_left_on
+      selector:
+        text:
+    entry_id:
+      selector:
+        config_entry:
+          integration: vestassistant
+
+next:
+  fields:
+    entry_id:
+      selector:
+        config_entry:
+          integration: vestassistant
+
+pin:
+  fields:
+    message:
+      required: true
+      selector:
+        text:
+    duration:
+      default:
+        minutes: 10
+      selector:
+        duration:
+    entry_id:
+      selector:
+        config_entry:
+          integration: vestassistant
+
+validate:
+  fields:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    rows:
+      selector:
+        number:
+          min: 1
+          max: 6
+    columns:
+      selector:
+        number:
+          min: 1
+          max: 22
+    entry_id:
+      selector:
+        config_entry:
+          integration: vestassistant

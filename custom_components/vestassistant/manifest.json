@@ -1,0 +1,12 @@
+{
+  "domain": "vestassistant",
+  "name": "Vestassistant",
+  "codeowners": ["@REPLACE_WITH_YOUR_GITHUB_HANDLE"],
+  "config_flow": true,
+  "documentation": "https://github.com/REPLACE_WITH_YOUR_GITHUB_HANDLE/vestassistant",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/REPLACE_WITH_YOUR_GITHUB_HANDLE/vestassistant/issues",
+  "requirements": ["vesta==0.14.0"],
+  "version": "0.1.0"
+}

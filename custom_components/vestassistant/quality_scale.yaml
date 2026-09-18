@@ -1,0 +1,46 @@
+# Target: bronze for 0.1, silver once reauth and offline recovery are proven
+# against a real board, gold when discovery and diagnostics land.
+rules:
+  config-flow: done
+  test-before-configure: done
+  unique-config-entry: done
+  config-flow-test-coverage: todo
+  runtime-data: done
+  entity-unique-id: done
+  has-entity-name: done
+  action-setup: done
+  appropriate-polling: done
+  brands: todo
+  common-modules: done
+  dependency-transparency: done
+  docs-actions: done
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: todo
+  entity-event-setup: done
+  action-exceptions: done
+  test-coverage: todo
+
+  # silver
+  config-entry-unloading: done
+  log-when-unavailable: done
+  entity-unavailable: todo
+  reauthentication-flow: done
+  parallel-updates: todo
+  integration-owner: done
+  docs-supported-devices: done
+  docs-troubleshooting: todo
+
+  # gold
+  discovery: todo
+  diagnostics: todo
+  reconfiguration-flow: todo
+  devices: done
+  entity-translations: done
+  icon-translations: done
+  repair-issues: todo
+
+  # platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing: todo

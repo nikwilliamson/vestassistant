@@ -1,0 +1,175 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your Vestaboard",
+        "description": "The Local API talks straight to the board on your network, with no cloud dependency and no rate limit, but needs an enablement token from Vestaboard. The Cloud API works immediately with a read/write token.",
+        "data": { "transport": "Connection" }
+      },
+      "local": {
+        "title": "Local API",
+        "description": "Enter your enablement token the first time; it is exchanged once for a permanent API key. If you already have the API key, enter that instead.",
+        "data": {
+          "host": "Host",
+          "enablement_token": "Enablement token",
+          "api_key": "Local API key"
+        }
+      },
+      "cloud": {
+        "title": "Cloud API",
+        "description": "Create a read/write token in the Vestaboard developer console.",
+        "data": { "token": "Read/write token" }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "data": { "token": "Read/write token", "api_key": "Local API key" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the board.",
+      "invalid_auth": "The board rejected those credentials."
+    },
+    "abort": {
+      "already_configured": "This board is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Rotation",
+        "data": {
+          "dwell_minutes": "Dwell",
+          "summary_threshold": "Summary card threshold",
+          "summary_template": "Summary card text",
+          "quiet_start": "Quiet hours start",
+          "quiet_end": "Quiet hours end",
+          "blend": "How attention and content share the board"
+        },
+        "data_description": {
+          "dwell_minutes": "How long each message stays up before the board advances.",
+          "summary_threshold": "Show a count card once this many things need attention. Zero disables it.",
+          "summary_template": "Use {n} for the count.",
+          "quiet_start": "Only tiers set to ignore quiet hours will post inside this window.",
+          "blend": "Alternate shows one thing that needs you, then one that does not. Attention first runs content only when nothing is pending."
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "source": {
+      "title": "Add a source",
+      "step": {
+        "user": {
+          "title": "What kind of source?",
+          "data": { "source_type": "Source" }
+        },
+        "list": {
+          "title": "Message list",
+          "description": "One message per line. Split a message across several boards with a pipe: SETUP | PUNCHLINE. Each is checked against your {board} before it is saved.",
+          "data": {
+            "name": "Name",
+            "tier": "Tier",
+            "entries": "Messages"
+          }
+        },
+        "todo": {
+          "title": "To-do list",
+          "description": "Every incomplete item on the list becomes a message.",
+          "data": { "name": "Name", "entity_id": "List", "tier": "Tier" }
+        },
+        "declared": {
+          "title": "Declared cards",
+          "description": "Entities that are on and carry a 'message' attribute become messages for as long as they stay on. Leave the entity list empty to pick up any entity that declares one.",
+          "data": { "name": "Name", "entity_id": "Entities", "tier": "Tier" }
+        }
+      },
+      "error": {
+        "does_not_fit": "One or more messages do not fit your board."
+      },
+      "abort": { "reconfigure_successful": "Source updated." },
+      "entry_type": "Source"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_item": { "name": "Current message" },
+      "attention_count": { "name": "Needs attention" }
+    },
+    "binary_sensor": { "quiet_hours": { "name": "Quiet hours" } },
+    "switch": { "rotation": { "name": "Rotation" } },
+    "number": { "dwell": { "name": "Dwell" } },
+    "button": { "next": { "name": "Next message" } }
+  },
+  "selector": {
+    "transport": {
+      "options": { "local": "Local API (on your network)", "cloud": "Cloud API" }
+    },
+    "tier": {
+      "options": {
+        "critical": "Critical - takes the whole board, ignores quiet hours",
+        "task": "Task - shares the board, counts as attention",
+        "content": "Content - the resting state of the board"
+      }
+    },
+    "source_type": {
+      "options": {
+        "list": "A list of messages you type here",
+        "todo": "A to-do list",
+        "declared": "Entities that declare their own message"
+      }
+    },
+    "blend": {
+      "options": {
+        "alternate": "Alternate between attention and content",
+        "attention_first": "Attention first, content only when idle"
+      }
+    }
+  },
+  "services": {
+    "add_item": {
+      "name": "Add item",
+      "description": "Put a message on the board's rotation. Calling this again with the same ID updates rather than duplicating.",
+      "fields": {
+        "item_id": { "name": "ID", "description": "Your own identifier. Reuse it to update, and pass it to Remove item." },
+        "message": { "name": "Message", "description": "A single board's worth of text." },
+        "cards": { "name": "Cards", "description": "Several boards shown in order, for a message too long for one. Never interleaved with anything else." },
+        "tier": { "name": "Tier", "description": "How urgently this competes for the board." },
+        "ttl": { "name": "Expire after", "description": "Remove automatically after this long." },
+        "expire_when": { "name": "Expire when", "description": "A template evaluated continuously. When it becomes true the item is removed, so you do not have to catch the moment it stops being relevant." },
+        "entry_id": { "name": "Board", "description": "Leave empty to target every board." }
+      }
+    },
+    "remove_item": {
+      "name": "Remove item",
+      "description": "Take a message off the rotation.",
+      "fields": {
+        "item_id": { "name": "ID", "description": "The ID you used when adding it." },
+        "entry_id": { "name": "Board", "description": "Leave empty to target every board." }
+      }
+    },
+    "next": {
+      "name": "Next",
+      "description": "Advance the rotation immediately.",
+      "fields": { "entry_id": { "name": "Board", "description": "Leave empty to target every board." } }
+    },
+    "pin": {
+      "name": "Pin",
+      "description": "Take the board now for a set time, then hand it back to the rotation.",
+      "fields": {
+        "message": { "name": "Message", "description": "What to show." },
+        "duration": { "name": "Duration", "description": "How long to hold the board." },
+        "entry_id": { "name": "Board", "description": "Leave empty to target every board." }
+      }
+    },
+    "validate": {
+      "name": "Validate",
+      "description": "Check whether a message fits, and see how it will wrap, without writing to the board.",
+      "fields": {
+        "message": { "name": "Message", "description": "The text to check." },
+        "rows": { "name": "Rows", "description": "Override the detected board height." },
+        "columns": { "name": "Columns", "description": "Override the detected board width." },
+        "entry_id": { "name": "Board", "description": "Which board's geometry to check against." }
+      }
+    }
+  }
+}
