@@ -73,7 +73,7 @@ The removal half of an imperative API is the half that gets missed, so
 actions:
   - action: vestassistant.add_item
     data:
-      id: stove_left_on
+      item_id: stove_left_on
       message: STOVE LEFT ON. GO CHECK IT.
       tier: critical
       expire_when: "{{ is_state('binary_sensor.range_left_on', 'off') }}"
@@ -94,7 +94,7 @@ with anything else:
 ```yaml
   - action: vestassistant.add_item
     data:
-      id: joke
+      item_id: joke
       cards:
         - "WHY DID THE SCARECROW"
         - "WIN AN AWARD?"
@@ -105,18 +105,17 @@ In a message list, use a pipe: `SETUP | PUNCHLINE`.
 
 ### Colour
 
-Every card carries a frame that says how much it matters. A `critical` item
-gets a full border, a `task` gets a thin rule, and `content` gets none - so
-you can tell a hazard from a chore from across the room without reading
-either. Severity decides whether there is a frame and how loud it is; you
-choose the hue when you add the source, or per item. A `content` card that
-names a colour still gets no frame, because there is nothing for the colour
-to tint.
+A card's frame says how much it matters. A `critical` item gets a full
+border, a `task` gets a thin rule, and `content` gets none - so you can tell
+a hazard from a chore from across the room without reading either. Severity
+decides whether there is a frame and how loud it is; you choose the hue when
+you add the source, or per item. A `content` card that names a colour still
+gets no frame, because there is nothing for the colour to tint.
 
 ```yaml
   - action: vestassistant.add_item
     data:
-      id: bins
+      item_id: bins
       message: BINS TONIGHT
       tier: task
       colour: 66
@@ -141,8 +140,10 @@ edge columns, because a full ring would leave only one row for text.
 
 Rather than cutting a message off, Vestassistant shortens it - `TOMORROW`
 becomes `TMRW`, `AND` becomes `&`, and articles go last of all. Only when
-none of that is enough does it truncate. Use `vestassistant.validate` (see
-below) to see which rung will be used before the message goes live.
+none of that is enough does it truncate. A card's frame eats into the same
+space, so `vestassistant.validate` (see below) only tells you which rung
+will actually be used once you give it the `tier` the card will render with
+- without one, it checks the text alone, on the bare board.
 
 ### Checking what fits
 
@@ -150,6 +151,7 @@ below) to see which rung will be used before the message goes live.
 action: vestassistant.validate
 data:
   message: I AM READING A BOOK ABOUT ANTI GRAVITY
+  tier: critical
 response_variable: result
 ```
 
@@ -157,6 +159,12 @@ Returns `fits`, `rows_needed`, `rows_available`, `columns`, `board`,
 `preview` (an ASCII preview of the wrapping), `overflow` (anything that did
 not fit), `error` (any character that the board cannot encode, empty when all
 encoded cleanly), and `shortened` (which fitting rung was used, empty if none).
+
+`tier` and `colour` are optional inputs, not part of the response: pass a
+`tier` to check the message the way it will actually be rendered, frame and
+all - the same tiers used by `add_item` (`critical`, `task`, `content`).
+`colour` picks the hue of that frame and is only used together with `tier`.
+Leave both out to check the text on its own, exactly as before.
 
 ## Installation
 
