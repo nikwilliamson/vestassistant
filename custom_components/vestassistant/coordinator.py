@@ -51,6 +51,10 @@ class WriteOutcome(enum.StrEnum):
     FAILED = "failed"
     """The board refused it - rate limited, offline, or still flipping."""
 
+    SKIPPED = "skipped"
+    """The card could not be encoded. Not retried - the text will not
+    improve on its own, and retrying it would loop until the item leaves."""
+
 
 VestassistantConfigEntry = ConfigEntry["VestassistantCoordinator"]
 
@@ -222,13 +226,11 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         wake_trigger = decision.wake_trigger
         if decision.write:
             outcome = await self._async_render(decision, now)
-            if outcome is not WriteOutcome.WRITTEN:
+            if outcome in (WriteOutcome.FAILED, WriteOutcome.DEFERRED):
                 # The board did NOT change, so the cursor must not claim it
-                # did. Leaving last_rendered set would make the next tick see
-                # the message as already up and skip it forever - the board
-                # and Home Assistant would silently disagree about what is on
-                # the wall, which is the one failure this design exists to
-                # avoid.
+                # did. SKIPPED is deliberately excluded: the card is
+                # unrenderable, so leaving last_rendered set is what stops
+                # the scheduler offering it again every retry.
                 self.cursor = self.cursor.with_(last_rendered=previously_rendered)
                 wake = self._retry_at(now, outcome)
                 # A retry is an ordinary tick, not a refresh: re-attempting a
@@ -267,6 +269,14 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 align=self.scheduler_config_align,
                 valign=self.scheduler_config_valign,
             )
+            if result.error:
+                _LOGGER.warning(
+                    "cannot render %r on a %s: %s",
+                    decision.text,
+                    geometry.name,
+                    result.error,
+                )
+                return WriteOutcome.SKIPPED
             if not result.fits:
                 _LOGGER.warning(
                     "message does not fit a %s and was truncated: %r (dropped %r)",

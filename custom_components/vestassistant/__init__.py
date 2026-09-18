@@ -314,6 +314,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         result = fit(call.data[ATTR_MESSAGE], geometry)
         return {
             "fits": result.fits,
+            "error": result.error,
             "rows_needed": result.rows_needed,
             "rows_available": geometry.rows,
             "columns": geometry.cols,

@@ -92,7 +92,8 @@
         }
       },
       "error": {
-        "does_not_fit": "One or more messages do not fit your board."
+        "does_not_fit": "One or more messages do not fit your board.",
+        "invalid_character": "That message uses a character the board cannot show, or a character code that does not exist. Colour chips are written as {63} through {68}."
       },
       "abort": { "reconfigure_successful": "Source updated." },
       "entry_type": "Source"

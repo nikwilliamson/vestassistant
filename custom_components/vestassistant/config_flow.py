@@ -349,13 +349,14 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             # does not fit because it is garbled on the wall is the bad
             # version of this feedback loop.
             geometry = self._geometry()
-            bad = [
-                line
+            results = [
+                fit(card.strip(), geometry)
                 for line in entries
                 for card in line.split("|")
-                if not fit(card.strip(), geometry).fits
             ]
-            if bad:
+            if any(r.error for r in results):
+                errors[CONF_ENTRIES] = "invalid_character"
+            elif any(not r.fits for r in results):
                 errors[CONF_ENTRIES] = "does_not_fit"
             else:
                 return self.async_create_entry(
