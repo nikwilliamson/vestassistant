@@ -7,6 +7,7 @@ from core.layout import (
     NOTE,
     Band,
     Geometry,
+    clean,
     fit,
     geometry_from_grid,
 )
@@ -114,10 +115,10 @@ def test_a_bar_is_a_row_break_and_two_bars_leave_a_blank_row():
 
 
 class TestEncodingErrors:
-    def test_unsupported_character_is_reported_not_raised(self):
-        result = fit("HELLO*WORLD", NOTE)
-        assert result.fits is False
-        assert "*" in result.error
+    def test_unsupported_characters_are_cleaned_not_reported(self):
+        result = fit("HELLO*WORLD", NOTE, align="left", valign="top")
+        assert result.error == ""
+        assert result.preview.splitlines()[0].rstrip() == "HELLOWORLD"
 
     def test_unknown_character_code_is_reported(self):
         result = fit("{99}", NOTE)
@@ -125,7 +126,7 @@ class TestEncodingErrors:
         assert "99" in result.error
 
     def test_failed_fit_returns_a_blank_grid_of_the_right_shape(self):
-        result = fit("HELLO*WORLD", NOTE)
+        result = fit("{99}", NOTE)
         assert len(result.grid) == NOTE.rows
         assert all(len(row) == NOTE.cols for row in result.grid)
         assert all(code == 0 for row in result.grid for code in row)
@@ -159,7 +160,7 @@ class TestShortening:
         assert result.overflow
 
     def test_an_encoding_error_is_not_masked_by_shortening(self):
-        result = fit("HELLO*WORLD", NOTE, shorten=True)
+        result = fit("HELLO {99} WORLD", NOTE, shorten=True)
         assert result.error
         assert not result.fits
 
@@ -216,3 +217,35 @@ class TestBand:
         assert all(r[0] == 63 for r in result.grid)
         assert result.shortened != ""
         assert result.fits
+
+
+class TestClean:
+    """Text made showable, everywhere, by way of fit."""
+
+    def test_accents_are_stripped(self):
+        assert clean("Caf\u00e9 with Zo\u00eb") == "Cafe with Zoe"
+
+    def test_smart_punctuation_gets_plain_stand_ins(self):
+        curly = "\u201cIt\u2019s on\u201d \u2013 maybe\u2026"
+        assert clean(curly) == '"It\'s on" - maybe...'
+
+    def test_emoji_are_dropped(self):
+        assert clean("\U0001f389 Party \U0001f389 time", markup=False) == "Party time"
+
+    def test_authored_text_keeps_chips_breaks_and_spacing(self):
+        assert clean("{63} hi|   - Doc") == "{63} hi|   - Doc"
+
+    def test_foreign_text_loses_chips_and_breaks(self):
+        assert clean("Dinner | drinks {maybe}", markup=False) == "Dinner / drinks maybe"
+
+    def test_nothing_showable_means_nothing(self):
+        assert clean("\U0001f389\U0001f389", markup=False) == ""
+
+    def test_fit_cleans_for_every_caller(self):
+        result = fit("Caf\u00e9 \U0001f389", NOTE, align="left", valign="top")
+        assert result.error == ""
+        assert result.preview.splitlines()[0].rstrip() == "CAFE"
+
+    def test_only_a_bad_code_is_still_an_error(self):
+        assert fit("HELLO*WORLD", NOTE).error == ""
+        assert fit("{99}", NOTE).error != ""

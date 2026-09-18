@@ -11,6 +11,8 @@ Everything here is pure; no Home Assistant, no I/O.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import re
+import unicodedata
 
 from vesta.chars import CHARMAP, PRINTABLE, encode
 
@@ -25,6 +27,7 @@ __all__ = [
     "FitResult",
     "Geometry",
     "blank",
+    "clean",
     "decode",
     "fit",
     "geometry_from_grid",
@@ -161,8 +164,9 @@ def fit(
 ) -> FitResult:
     """Lay ``text`` out on a board of the given geometry.
 
-    Never raises: overlong input is truncated and reported, and text the
-    board cannot encode comes back with ``error`` set.
+    Never raises: overlong input is truncated and reported. Characters the
+    board cannot show are cleaned away first (see ``clean``), so ``error``
+    is only ever a malformed or unknown ``{code}``.
 
     A newline or a ``|`` starts a new row; an empty line is a blank row.
     With ``shorten``, the abbreviation ladder is tried before truncation.
@@ -170,6 +174,7 @@ def fit(
     and the text is laid out in what remains — which is the one thing a chip
     string cannot do for itself, because the text sits beside it.
     """
+    text = clean(text)
     if band is None or not (reserved := band.columns(geometry)):
         return _fit_text(text, geometry, align=align, valign=valign, shorten=shorten)
 
@@ -305,3 +310,47 @@ def geometry_from_grid(grid: list[list[int]]) -> Geometry:
     rows = len(grid)
     cols = max((len(r) for r in grid), default=0)
     return KNOWN.get((rows, cols), Geometry(rows=rows, cols=cols))
+
+
+#: Characters the board lacks that have an obvious stand-in. Everything else
+#: it cannot show is dropped.
+_STAND_INS: dict[str, str] = {
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2026": "...",
+    "\u00a0": " ",
+    "\t": " ",
+}
+
+#: In text from outside the integration, braces are punctuation rather than
+#: a colour code, and a bar is a separator rather than a row break.
+_FOREIGN_STAND_INS: dict[str, str] = {**_STAND_INS, "|": "/", "{": "", "}": ""}
+
+
+def clean(text: str, *, markup: bool = True) -> str:
+    """Make text showable: accents stripped, curly quotes and long dashes
+    flattened, emoji and whatever else the board cannot flip to dropped.
+
+    ``fit`` applies this to everything, so no source has to. With ``markup``
+    (the default) the board's own syntax survives - ``{63}`` chips, ``|``
+    row breaks, and any spacing the author laid out by hand. Sources whose
+    text was never written with the board in mind - a calendar title, a
+    to-do item - pass ``markup=False``, which also neutralises those and
+    tidies the whitespace.
+    """
+    stand_ins = _STAND_INS if markup else _FOREIGN_STAND_INS
+    out: list[str] = []
+    for char in unicodedata.normalize("NFKD", text):
+        if char in stand_ins:
+            out.append(stand_ins[char])
+        elif char in "\n{}|" or char.upper() in CHARMAP:
+            out.append(char)
+        # Combining marks and unsupported characters fall through and vanish.
+    result = "".join(out)
+    if markup:
+        return result
+    return re.sub(r" {2,}", " ", result).strip()

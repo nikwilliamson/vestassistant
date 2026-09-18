@@ -15,15 +15,6 @@ from .entity import VestassistantEntity
 #: far less than that, so the real limit is the board's own capacity.
 HA_MAX = 255
 
-#: The characters a Vestaboard can physically show, plus braces for colour
-#: codes like {63} and a bar for a row break. Lower case is allowed because
-#: the board uppercases everything anyway. Built by hand from
-#: ``vesta.chars.PRINTABLE`` rather than generated at import time, so a
-#: change to that table is a visible diff here.
-#: The frontend rejects anything outside it as you type; laying the message
-#: out is still what decides whether it actually fits.
-PATTERN = r"""[ A-Za-z!"#$%&'()+,\-./0123456789:;=?@°{}|]*"""
-
 PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 
 
@@ -45,7 +36,6 @@ class MessageText(VestassistantEntity, TextEntity):
 
     _attr_mode = TextMode.TEXT
     _attr_native_min = 0
-    _attr_pattern = PATTERN
 
     def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "message")
@@ -69,6 +59,8 @@ class MessageText(VestassistantEntity, TextEntity):
         if geometry is not None:
             # Say why it will not work while the box still has the text in
             # it, rather than logging a failure the typist never sees.
+            # Anything the board cannot show is cleaned away in fit, so the
+            # only error left is a malformed colour code.
             result = fit(message, geometry, shorten=True)
             if result.error:
                 raise ServiceValidationError(

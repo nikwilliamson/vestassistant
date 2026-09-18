@@ -25,7 +25,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from ..core.layout import NOTE, Geometry
+from ..core.layout import NOTE, Geometry, clean
 from ..core.models import TIER_CONTENT, Item
 from ..core.patterns import CONTRAST, HUES, PATTERNS, TIME_OF_DAY, WHITE, render
 from ..core.phrasing import clock_text, event_text, forecast_text
@@ -351,7 +351,9 @@ class CalendarSource(Source):
 
 
 def _parse_event(raw: dict[str, Any]) -> _Event | None:
-    summary = str(raw.get("summary") or "").strip()
+    # Cleaned here, not at render: a title the board cannot show at all
+    # should contribute nothing rather than a card that gets skipped.
+    summary = clean(str(raw.get("summary") or ""), markup=False)
     if not summary:
         return None
     start, all_day = _parse_when(raw.get("start"))

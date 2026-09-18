@@ -18,6 +18,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.helpers.template import Template
 
+from ..core.layout import clean
 from ..core.models import TIER_CONTENT, TIER_TASK, Item
 from .base import Source
 
@@ -90,14 +91,14 @@ class TodoSource(Source):
             self._cache = []
             return
         entries = (response or {}).get(self.entity_id, {}).get("items", [])
-        self._cache = [
+        cleaned = (
             (
                 str(entry.get("uid") or entry.get("summary")),
-                str(entry.get("summary", "")),
+                clean(str(entry.get("summary", "")), markup=False),
             )
             for entry in entries
-            if entry.get("summary")
-        ]
+        )
+        self._cache = [(uid, summary) for uid, summary in cleaned if summary]
 
     def items(self, now: datetime) -> list[Item]:
         return [
