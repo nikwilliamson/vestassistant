@@ -1,5 +1,9 @@
 # Vestassistant
 
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Release](https://img.shields.io/github/v/release/nikwilliamson/vestassistant)](https://github.com/nikwilliamson/vestassistant/releases)
+[![License](https://img.shields.io/github/license/nikwilliamson/vestassistant)](LICENSE)
+
 A message scheduler for [Vestaboard](https://www.vestaboard.com/) in Home Assistant.
 
 Most Vestaboard integrations are a way to *send* a message. This one owns the
@@ -8,7 +12,47 @@ urgent things interrupt, and gets out of the way when you post something
 yourself. Your automations never mention the board at all — they add and
 remove items, or simply raise a sensor, and the board works out the rest.
 
+- Quiet hours, a dwell you set per board, and a summary card that heads
+  each pass once enough things are pending.
+- Takes content from hand-typed lists, to-do lists, entities that declare
+  their own cards, service calls, and built-in clock and forecast cards.
+- Three severity tiers, each with a coloured frame, so you can read a card's
+  importance from across the room without reading the card.
+- Shortens a message that nearly fits rather than cutting the end off.
+- Yields for thirty minutes when you post something from the Vestaboard app.
+- Works with a Note or a Flagship, over the local API or the cloud.
+
 > Not affiliated with or endorsed by Vestaboard.
+
+## Installation
+
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nikwilliamson&repository=vestassistant&category=integration)
+
+Or by hand: HACS → ⋮ → Custom repositories → this repo, category
+*Integration*. Then **Settings → Devices & Services → Add Integration →
+Vestassistant**.
+
+Needs Home Assistant 2025.12 or later.
+
+### Local or Cloud?
+
+Either works, and the difference is small.
+
+**Local API** talks straight to the board on your network. No cloud
+dependency, no rate limit. Needs an enablement token, which you request from
+Vestaboard once and exchange for a permanent key.
+
+**Cloud API** works immediately with a read/write token from the developer
+console. Vestaboard drops anything sent within fifteen seconds of the previous
+message, so Vestassistant spaces its writes automatically.
+
+Quiet hours are applied here, not by Vestaboard. The cloud enforces its own by
+silently dropping posts, which would leave the board showing something Home
+Assistant believes it has already replaced — so every write goes out forced
+and the policy is applied locally. **Turn off quiet hours in the Vestaboard
+app** and set them in the integration's options instead.
+
+Board geometry is detected from the board itself. Note and Flagship both work.
 
 ## Why
 
@@ -106,7 +150,7 @@ In a message list, use a pipe: `SETUP | PUNCHLINE`.
 ### Colour
 
 A card's frame says how much it matters. A `critical` item gets a full
-border, a `task` gets a thin rule, and `content` gets none - so you can tell
+border, a `task` gets a thin rule, and `content` gets none — so you can tell
 a hazard from a chore from across the room without reading either. Severity
 decides whether there is a frame and how loud it is; you choose the hue when
 you add the source, or per item. A `content` card that names a colour still
@@ -121,7 +165,7 @@ gets no frame, because there is nothing for the colour to tint.
       colour: 66
 ```
 
-Colours are character codes, and they work anywhere a message does - in a
+Colours are character codes, and they work anywhere a message does — in a
 list, in a declared card, in `add_item`:
 
 ```yaml
@@ -138,12 +182,12 @@ edge columns, because a full ring would leave only one row for text.
 
 ### Messages that nearly fit
 
-Rather than cutting a message off, Vestassistant shortens it - `TOMORROW`
+Rather than cutting a message off, Vestassistant shortens it — `TOMORROW`
 becomes `TMRW`, `AND` becomes `&`, and articles go last of all. Only when
 none of that is enough does it truncate. A card's frame eats into the same
 space, so `vestassistant.validate` (see below) only tells you which rung
 will actually be used once you give it the `tier` the card will render with
-- without one, it checks the text alone, on the bare board.
+— without one, it checks the text alone, on the bare board.
 
 ### Checking what fits
 
@@ -162,34 +206,9 @@ encoded cleanly), and `shortened` (which fitting rung was used, empty if none).
 
 `tier` and `colour` are optional inputs, not part of the response: pass a
 `tier` to check the message the way it will actually be rendered, frame and
-all - the same tiers used by `add_item` (`critical`, `task`, `content`).
+all — the same tiers used by `add_item` (`critical`, `task`, `content`).
 `colour` picks the hue of that frame and is only used together with `tier`.
 Leave both out to check the text on its own, exactly as before.
-
-## Installation
-
-HACS → ⋮ → Custom repositories → this repo, category *Integration*. Then
-**Settings → Devices & Services → Add Integration → Vestassistant**.
-
-### Local or Cloud?
-
-Either works, and the difference is small.
-
-**Local API** talks straight to the board on your network. No cloud
-dependency, no rate limit. Needs an enablement token, which you request from
-Vestaboard once and exchange for a permanent key.
-
-**Cloud API** works immediately with a read/write token from the developer
-console. Vestaboard drops anything sent within fifteen seconds of the previous
-message, so Vestassistant spaces its writes automatically.
-
-Quiet hours are applied here, not by Vestaboard. The cloud enforces its own by
-silently dropping posts, which would leave the board showing something Home
-Assistant believes it has already replaced — so every write goes out forced
-and the policy is applied locally. **Turn off quiet hours in the Vestaboard
-app** and set them in the integration's options instead.
-
-Board geometry is detected from the board itself. Note and Flagship both work.
 
 ## Entities
 
@@ -212,6 +231,73 @@ stamping on it.
 It does not coexist with a second scheduler. If you use Vestaboard+ scheduled
 channels, turn them off: they have no idea what is happening in your house,
 and a channel firing on schedule will happily overwrite a live alert.
+
+## Troubleshooting
+
+**The rotation has stopped, and the board is showing something I didn't
+schedule.** Vestassistant reads the board back every minute and treats
+anything it did not write as somebody posting by hand, then yields for thirty
+minutes. A Vestaboard+ scheduled channel looks exactly like a person, so turn
+channels off.
+
+**Messages are being dropped.** Cloud only: Vestaboard discards anything sent
+within fifteen seconds of the previous message. Vestassistant spaces its own
+writes, but anything else writing to the same board will collide with it.
+
+**Quiet hours seem to apply twice.** Turn them off in the Vestaboard app and
+set them in the integration's options instead — see [Local or
+Cloud?](#local-or-cloud).
+
+**A card never appears, and nothing else seems wrong.** It probably contains
+a character the board cannot show. Those cards are skipped rather than
+written, because the alternative is writing a blank grid over whatever was
+up. The log names the character:
+
+```
+cannot render 'HELLO*WORLD' on a Vestaboard Note: 6: unsupported character: *
+```
+
+**`vestassistant.pin` did nothing.** Same cause, logged as `cannot pin`. A
+pin that cannot be encoded leaves the board and the rotation exactly as they
+were.
+
+**I set a colour and nothing changed.** Colour picks the hue of a card's
+frame; severity decides whether there is a frame at all. A `content` card has
+none, so there is nothing to tint. See [Colour](#colour).
+
+**A message came out abbreviated.** Deliberate — see [Messages that nearly
+fit](#messages-that-nearly-fit). A frame eats into the same space, so pass
+the card's `tier` to `vestassistant.validate` to see what will actually be
+rendered.
+
+**The local API will not enable.** The enablement token is requested from
+Vestaboard and is single-use. The board also needs to be reachable over
+IPv4 — Vestaboard report inconsistent results over IPv6.
+
+To see what the scheduler is deciding and why:
+
+```yaml
+logger:
+  logs:
+    custom_components.vestassistant: debug
+```
+
+Every decision is logged with its reason — `next attention item`, `summary
+card`, `yielding to a message posted outside Vestassistant`.
+
+## Removing it
+
+**Settings → Devices & Services → Vestassistant → ⋮ → Delete**, then remove
+the repository from HACS.
+
+Deleting the integration does not clear the board. It keeps whatever was last
+on it, which is usually what you want — post from the Vestaboard app if you
+would rather it said something else.
+
+The rotation's saved state lives in `.storage/vestassistant.state.<entry_id>`
+and is not removed automatically. It is harmless, and it means a reinstall
+picks up mid-rotation rather than starting over, but delete the file if you
+want a clean slate.
 
 ## Development
 
