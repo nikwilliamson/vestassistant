@@ -34,7 +34,6 @@ ABBREVIATIONS: dict[str, str] = {
     "AND": "&",
     "AT": "@",
     "PERCENT": "%",
-    "NUMBER": "NO",
 }
 
 #: Dropped only on the last rung before truncation - a card reads worse
