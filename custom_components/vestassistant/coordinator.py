@@ -268,6 +268,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 geometry,
                 align=self.scheduler_config_align,
                 valign=self.scheduler_config_valign,
+                shorten=True,
             )
             if result.error:
                 _LOGGER.warning(

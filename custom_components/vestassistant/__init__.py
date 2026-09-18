@@ -311,7 +311,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             geometry = coordinators[0].geometry
         else:
             geometry = NOTE
-        result = fit(call.data[ATTR_MESSAGE], geometry)
+        result = fit(call.data[ATTR_MESSAGE], geometry, shorten=True)
         return {
             "fits": result.fits,
             "error": result.error,
@@ -321,6 +321,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             "board": geometry.name,
             "preview": result.preview,
             "overflow": result.overflow,
+            "shortened": result.shortened,
         }
 
     hass.services.async_register(DOMAIN, SERVICE_ADD_ITEM, _add_item, ADD_ITEM_SCHEMA)

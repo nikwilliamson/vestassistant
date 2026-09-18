@@ -10,9 +10,11 @@ Everything here is pure; no Home Assistant, no I/O.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from vesta.chars import CHARMAP, PRINTABLE, encode
+
+from .fitting import variants
 
 __all__ = [
     "FLAGSHIP",
@@ -68,6 +70,12 @@ class FitResult:
     the validate service - and each wants to react differently, so this is
     reported rather than thrown.
     """
+    shortened: str = ""
+    """Which rung of the abbreviation ladder made it fit, if any.
+
+    Empty when the text fit as written, and also when nothing worked and it
+    had to be truncated after all.
+    """
 
     @property
     def preview(self) -> str:
@@ -119,8 +127,44 @@ def fit(
     *,
     align: str = "center",
     valign: str = "middle",
+    shorten: bool = False,
 ) -> FitResult:
     """Lay ``text`` out on a board of the given geometry.
+
+    Never raises: overlong input is truncated and reported, and text the
+    board cannot encode comes back with ``error`` set, so a caller can decide
+    whether that is a validation failure (authoring a message) or something
+    to skip (rendering one that is already saved).
+
+    With ``shorten``, the abbreviation ladder is tried before truncation -
+    losing a few letters beats losing the end of the sentence.
+    """
+    if not shorten:
+        return _fit_once(text, geometry, align=align, valign=valign)
+
+    last: FitResult | None = None
+    for rung, candidate in variants(text):
+        result = _fit_once(candidate, geometry, align=align, valign=valign)
+        if result.error:
+            # A bad character will not be fixed by abbreviating it.
+            return result
+        if result.fits:
+            return replace(result, shortened=rung)
+        last = result
+    # Nothing fit. Return the most aggressive attempt, truncated as before.
+    if last is not None:
+        return last
+    return _fit_once(text, geometry, align=align, valign=valign)
+
+
+def _fit_once(
+    text: str,
+    geometry: Geometry,
+    *,
+    align: str = "center",
+    valign: str = "middle",
+) -> FitResult:
+    """Lay ``text`` on a board of the given geometry.
 
     Never raises on overlong input - it truncates and reports, so a caller can
     decide whether that is a validation error (authoring a message) or an

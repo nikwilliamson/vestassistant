@@ -132,3 +132,36 @@ class TestEncodingErrors:
         result = fit("{63}{66}AB", NOTE, align="left", valign="top")
         assert result.error == ""
         assert result.grid[0][:4] == [63, 66, 1, 2]
+
+
+class TestShortening:
+    def test_leaves_a_message_that_already_fits_alone(self):
+        result = fit("BINS OUT", NOTE, shorten=True)
+        assert result.fits
+        assert result.shortened == ""
+
+    def test_abbreviates_to_make_it_fit(self):
+        # 'PLEASE TAKE THE BINS OUT TOMORROW MORNING' overflows a Note as written.
+        long = "PLEASE TAKE THE BINS OUT TOMORROW MORNING"
+        assert not fit(long, NOTE).fits
+        result = fit(long, NOTE, shorten=True)
+        assert result.fits
+        assert result.shortened in ("abbreviations", "articles")
+
+    def test_records_which_rung_was_used(self):
+        result = fit("PLEASE TAKE THE BINS OUT TOMORROW MORNING", NOTE, shorten=True)
+        assert result.shortened != ""
+
+    def test_falls_back_to_truncation_when_nothing_fits(self):
+        result = fit("SUPERCALIFRAGILISTIC " * 6, NOTE, shorten=True)
+        assert not result.fits
+        assert result.overflow
+
+    def test_shortening_is_off_by_default(self):
+        long = "PLEASE TAKE THE BINS OUT TOMORROW MORNING"
+        assert fit(long, NOTE).shortened == ""
+
+    def test_an_encoding_error_is_not_masked_by_shortening(self):
+        result = fit("HELLO*WORLD", NOTE, shorten=True)
+        assert result.error
+        assert not result.fits
