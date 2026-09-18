@@ -189,6 +189,8 @@
         "message": { "name": "Message", "description": "The text to check." },
         "rows": { "name": "Rows", "description": "Override the detected board height." },
         "columns": { "name": "Columns", "description": "Override the detected board width." },
+        "tier": { "name": "Tier", "description": "Check against this tier's chrome, the way a real card would be rendered. Leave blank to check the text alone, with no frame reserved." },
+        "colour": { "name": "Colour", "description": "The colour of the frame to check against. Only used together with tier." },
         "entry_id": { "name": "Board", "description": "Which board's geometry to check against." }
       }
     }

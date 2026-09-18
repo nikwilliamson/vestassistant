@@ -57,7 +57,14 @@ from .const import (
     TRANSPORT_LOCAL,
 )
 from .core.layout import fit
-from .core.models import TIER_CONTENT, TIER_CRITICAL, TIER_TASK
+from .core.models import (
+    TIER_CONTENT,
+    TIER_CRITICAL,
+    TIER_TASK,
+    Item,
+    TierSet,
+    resolve_chrome,
+)
 from .transport.base import VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
@@ -359,10 +366,22 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             ]
             # Checked here rather than at render time: finding out a message
             # does not fit because it is garbled on the wall is the bad
-            # version of this feedback loop.
+            # version of this feedback loop. The rendered card carries
+            # chrome, so validation has to reserve the same space or a
+            # message can validate here and still get truncated on the wall.
             geometry = self._geometry()
+            chrome = resolve_chrome(
+                Item(
+                    id="validate",
+                    source="validate",
+                    cards=("",),
+                    tier=user_input[CONF_TIER],
+                    colour=user_input.get(CONF_COLOUR),
+                ),
+                TierSet(),
+            )
             results = [
-                fit(card.strip(), geometry)
+                fit(card.strip(), geometry, chrome=chrome)
                 for line in entries
                 for card in line.split("|")
             ]

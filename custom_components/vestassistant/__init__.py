@@ -67,7 +67,14 @@ from .const import (
 )
 from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .core.layout import NOTE, Geometry, fit
-from .core.models import TIER_CONTENT, SchedulerConfig, TierSet, Trigger
+from .core.models import (
+    TIER_CONTENT,
+    Item,
+    SchedulerConfig,
+    TierSet,
+    Trigger,
+    resolve_chrome,
+)
 from .sources.base import ListSource
 from .sources.dynamic import DeclaredSource, ServiceSource, TodoSource
 from .sources.generated import ClockSource, ForecastSource
@@ -248,6 +255,10 @@ VALIDATE_SCHEMA = vol.Schema(
         vol.Required(ATTR_MESSAGE): cv.string,
         vol.Optional("rows"): cv.positive_int,
         vol.Optional("columns"): cv.positive_int,
+        vol.Optional(ATTR_TIER): cv.string,
+        vol.Optional(ATTR_COLOUR): vol.All(
+            vol.Coerce(int), vol.Range(min=63, max=68)
+        ),
         vol.Optional("entry_id"): cv.string,
     }
 )
@@ -320,7 +331,22 @@ def _async_register_services(hass: HomeAssistant) -> None:
             geometry = coordinators[0].geometry
         else:
             geometry = NOTE
-        result = fit(call.data[ATTR_MESSAGE], geometry, shorten=True)
+        chrome = None
+        if ATTR_TIER in call.data:
+            tiers = (
+                coordinators[0].scheduler_config.tiers if coordinators else TierSet()
+            )
+            chrome = resolve_chrome(
+                Item(
+                    id="validate",
+                    source="validate",
+                    cards=("",),
+                    tier=call.data[ATTR_TIER],
+                    colour=call.data.get(ATTR_COLOUR),
+                ),
+                tiers,
+            )
+        result = fit(call.data[ATTR_MESSAGE], geometry, shorten=True, chrome=chrome)
         return {
             "fits": result.fits,
             "error": result.error,
