@@ -31,7 +31,7 @@ from .core.models import (
     Item,
     SchedulerConfig,
     Trigger,
-    resolve_chrome,
+    resolve_band,
 )
 from .core.scheduler import decide
 from .transport.base import Transport, VestaboardAuthError, VestaboardError
@@ -300,8 +300,8 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         if decision.blank:
             grid = blank(geometry)
         else:
-            chrome = (
-                resolve_chrome(decision.item, self.scheduler_config.tiers)
+            band = (
+                resolve_band(decision.item, self.scheduler_config.tiers)
                 if decision.item is not None
                 else None
             )
@@ -311,7 +311,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 align=self.scheduler_config_align,
                 valign=self.scheduler_config_valign,
                 shorten=True,
-                chrome=chrome,
+                band=band,
             )
             if result.error:
                 _LOGGER.warning(

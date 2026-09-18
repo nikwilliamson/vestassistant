@@ -73,7 +73,7 @@ from .core.models import (
     SchedulerConfig,
     TierSet,
     Trigger,
-    resolve_chrome,
+    resolve_band,
 )
 from .sources.base import ListSource
 from .sources.dynamic import DeclaredSource, ServiceSource, TodoSource
@@ -331,12 +331,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
             geometry = coordinators[0].geometry
         else:
             geometry = NOTE
-        chrome = None
+        band = None
         if ATTR_TIER in call.data:
             tiers = (
                 coordinators[0].scheduler_config.tiers if coordinators else TierSet()
             )
-            chrome = resolve_chrome(
+            band = resolve_band(
                 Item(
                     id="validate",
                     source="validate",
@@ -346,7 +346,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 ),
                 tiers,
             )
-        result = fit(call.data[ATTR_MESSAGE], geometry, shorten=True, chrome=chrome)
+        result = fit(call.data[ATTR_MESSAGE], geometry, shorten=True, band=band)
         return {
             "fits": result.fits,
             "error": result.error,

@@ -11,7 +11,6 @@ Everything here is pure; no Home Assistant, no I/O.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Final
 
 from vesta.chars import CHARMAP, PRINTABLE, encode
 
@@ -21,7 +20,7 @@ __all__ = [
     "FLAGSHIP",
     "NOTE",
     "PRINTABLE",
-    "Chrome",
+    "Band",
     "FitResult",
     "Geometry",
     "blank",
@@ -57,35 +56,25 @@ KNOWN: dict[tuple[int, int], Geometry] = {
 }
 
 
-#: A board needs at least this many rows before a full ring is worth it;
-#: below it, a ring would leave a single usable row.
-RING_MIN_ROWS: Final = 4
-
-
 @dataclass(frozen=True, slots=True)
-class Chrome:
-    """A coloured frame drawn around a card.
+class Band:
+    """A coloured stripe down the left edge of a card.
 
-    Severity decides how loud it is, so this carries the weight rather than
+    Severity decides how wide it is, so this carries the width rather than
     the tier: the layout has no business knowing what 'critical' means.
+
+    The left edge only, deliberately. A ring around the whole card costs 52
+    of a Flagship's 132 tiles to say one thing, and on a Note it leaves the
+    text pressed against a right-hand edge with nowhere to breathe.
     """
 
     colour: int
-    weight: str
-    """``border`` or ``rule``."""
+    width: int
+    """Columns reserved at the left edge."""
 
-    def inset(self, geometry: Geometry) -> tuple[int, int, int, int]:
-        """Cells reserved at each edge, as ``(top, right, bottom, left)``.
-
-        A ``rule`` only ever costs the left column. A ``border`` wants a full
-        ring, but on a board shorter than ``RING_MIN_ROWS`` that would leave a
-        single usable row, so it degrades to edge columns only.
-        """
-        if self.weight == "rule":
-            return (0, 0, 0, 1)
-        if geometry.rows >= RING_MIN_ROWS:
-            return (1, 1, 1, 1)
-        return (0, 1, 0, 1)
+    def columns(self, geometry: Geometry) -> int:
+        """Columns actually reserved, never so many that no card is left."""
+        return max(0, min(self.width, geometry.cols - 1))
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +150,7 @@ def fit(
     align: str = "center",
     valign: str = "middle",
     shorten: bool = False,
-    chrome: Chrome | None = None,
+    band: Band | None = None,
 ) -> FitResult:
     """Lay ``text`` out on a board of the given geometry.
 
@@ -169,39 +158,19 @@ def fit(
     board cannot encode comes back with ``error`` set.
 
     With ``shorten``, the abbreviation ladder is tried before truncation.
-    With ``chrome``, the edges are reserved for a coloured frame and the text
-    is laid out in what remains - which is the one thing a chip string cannot
-    do for itself, because the text sits inside it.
+    With ``band``, the left-hand columns are reserved for a coloured stripe
+    and the text is laid out in what remains — which is the one thing a chip
+    string cannot do for itself, because the text sits beside it.
     """
-    if chrome is None:
+    if band is None or not (reserved := band.columns(geometry)):
         return _fit_text(text, geometry, align=align, valign=valign, shorten=shorten)
 
-    top, right, bottom, left = chrome.inset(geometry)
-    inner = Geometry(
-        rows=max(1, geometry.rows - top - bottom),
-        cols=max(1, geometry.cols - left - right),
-    )
+    inner = Geometry(rows=geometry.rows, cols=geometry.cols - reserved)
     result = _fit_text(text, inner, align=align, valign=valign, shorten=shorten)
     if result.error:
         return result
-    return replace(result, grid=_frame(result.grid, geometry, chrome))
-
-
-def _frame(
-    inner: list[list[int]], geometry: Geometry, chrome: Chrome
-) -> list[list[int]]:
-    """Paint the frame and drop the laid-out text into the middle of it."""
-    top, _right, _bottom, left = chrome.inset(geometry)
-    grid = [[chrome.colour] * geometry.cols for _ in range(geometry.rows)]
-    for r, source in enumerate(inner):
-        for c, code in enumerate(source):
-            # On a geometry too small for the inset to actually fit (not
-            # reachable with a real board today), clamp rather than index
-            # past the frame we just painted.
-            row_i = min(r + top, geometry.rows - 1)
-            col_i = min(c + left, geometry.cols - 1)
-            grid[row_i][col_i] = code
-    return grid
+    stripe = [band.colour] * reserved
+    return replace(result, grid=[stripe + row for row in result.grid])
 
 
 def _fit_text(

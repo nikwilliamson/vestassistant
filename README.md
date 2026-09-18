@@ -18,8 +18,8 @@ remove items, or simply raise a sensor, and the board works out the rest.
   each pass once enough things are pending.
 - Takes content from hand-typed lists, to-do lists, entities that declare
   their own cards, service calls, and built-in clock and forecast cards.
-- Three severity tiers, each with a coloured frame, so you can read a card's
-  importance from across the room without reading the card.
+- Three severity tiers, each with a coloured band down the left edge, so you
+  can read a card's importance from across the room without reading the card.
 - Shortens a message that nearly fits rather than cutting the end off.
 - Yields for thirty minutes when you post something from the Vestaboard app.
 - Works with a Note or a Flagship, over the local API or the cloud.
@@ -151,12 +151,13 @@ In a message list, use a pipe: `SETUP | PUNCHLINE`.
 
 ### Colour
 
-A card's frame says how much it matters. A `critical` item gets a full
-border, a `task` gets a thin rule, and `content` gets none — so you can tell
-a hazard from a chore from across the room without reading either. Severity
-decides whether there is a frame and how loud it is; you choose the hue when
-you add the source, or per item. A `content` card that names a colour still
-gets no frame, because there is nothing for the colour to tint.
+A card carries a coloured band down its left edge that says how much it
+matters. A `critical` item gets two columns, a `task` gets one, and `content`
+gets none — so you can tell a hazard from a chore from across the room without
+reading either. Severity decides whether there is a band and how wide it is;
+you choose the hue when you add the source, or per item. A `content` card that
+names a colour still gets no band, because there is nothing for the colour to
+tint.
 
 ```yaml
   - action: vestassistant.add_item
@@ -179,14 +180,15 @@ Codes 69, 70 and 71 are deliberately not offered: 71 is unavailable over the
 local API, and 69 and 70 mean different things on a black board than on a
 white one, which neither API reports.
 
-On a three-row Vestaboard Note, a `critical` card's full border becomes two
-edge columns, because a full ring would leave only one row for text.
+The band is only ever on the left. A ring around the card would cost 52 of a
+Flagship's 132 tiles to say one thing, and on a Note it would press the text
+against the opposite edge with nowhere to breathe.
 
 ### Messages that nearly fit
 
 Rather than cutting a message off, Vestassistant shortens it — `TOMORROW`
 becomes `TMRW`, `AND` becomes `&`, and articles go last of all. Only when
-none of that is enough does it truncate. A card's frame eats into the same
+none of that is enough does it truncate. A card's band eats into the same
 space, so `vestassistant.validate` (see below) only tells you which rung
 will actually be used once you give it the `tier` the card will render with
 — without one, it checks the text alone, on the bare board.
@@ -207,9 +209,9 @@ not fit), `error` (any character that the board cannot encode, empty when all
 encoded cleanly), and `shortened` (which fitting rung was used, empty if none).
 
 `tier` and `colour` are optional inputs, not part of the response: pass a
-`tier` to check the message the way it will actually be rendered, frame and
+`tier` to check the message the way it will actually be rendered, band and
 all — the same tiers used by `add_item` (`critical`, `task`, `content`).
-`colour` picks the hue of that frame and is only used together with `tier`.
+`colour` picks the hue of that band and is only used together with `tier`.
 Leave both out to check the text on its own, exactly as before.
 
 ## Entities
@@ -264,11 +266,11 @@ pin that cannot be encoded leaves the board and the rotation exactly as they
 were.
 
 **I set a colour and nothing changed.** Colour picks the hue of a card's
-frame; severity decides whether there is a frame at all. A `content` card has
+band; severity decides whether there is a band at all. A `content` card has
 none, so there is nothing to tint. See [Colour](#colour).
 
 **A message came out abbreviated.** Deliberate — see [Messages that nearly
-fit](#messages-that-nearly-fit). A frame eats into the same space, so pass
+fit](#messages-that-nearly-fit). A band eats into the same space, so pass
 the card's `tier` to `vestassistant.validate` to see what will actually be
 rendered.
 

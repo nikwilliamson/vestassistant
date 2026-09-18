@@ -14,7 +14,7 @@ sys.path.insert(
 from core.layout import (
     FLAGSHIP,
     NOTE,
-    Chrome,
+    Band,
     Geometry,
     fit,
     geometry_from_grid,
@@ -161,59 +161,55 @@ class TestShortening:
         assert not result.fits
 
 
-class TestChrome:
-    def test_border_rings_a_flagship(self):
-        result = fit("HI", FLAGSHIP, chrome=Chrome(colour=63, weight="border"))
-        assert all(c == 63 for c in result.grid[0])
-        assert all(c == 63 for c in result.grid[-1])
-        assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
-        # The ring is exactly one cell deep - a two-cell-deep ring would still
-        # pass every assertion above.
-        assert result.grid[1][1] == 0
-        assert result.grid[1][-2] == 0
-        assert result.grid[-2][1] == 0
-        assert result.grid[-2][-2] == 0
+class TestBand:
+    def test_critical_band_is_two_columns_on_the_left(self):
+        result = fit("HI", FLAGSHIP, band=Band(colour=63, width=2))
+        assert all(r[0] == 63 and r[1] == 63 for r in result.grid)
+        # The third column belongs to the card. A three-wide band would pass
+        # every assertion above without this one.
+        assert not any(r[2] == 63 for r in result.grid)
 
-    def test_border_degrades_to_edge_columns_on_a_note(self):
-        result = fit("HI", NOTE, chrome=Chrome(colour=63, weight="border"))
-        assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
-        # The top row is not consumed - a Note has only three.
+    def test_a_band_never_touches_the_other_edges(self):
+        # The whole point of a band over a ring: the card keeps its right
+        # edge, its top row and its bottom row.
+        result = fit("HI", FLAGSHIP, band=Band(colour=63, width=2))
+        assert not any(r[-1] == 63 for r in result.grid)
         assert not all(c == 63 for c in result.grid[0])
+        assert not all(c == 63 for c in result.grid[-1])
 
-    def test_rule_takes_one_column(self):
-        result = fit("HI", NOTE, chrome=Chrome(colour=64, weight="rule"))
-        assert all(r[0] == 64 for r in result.grid)
-        assert not any(r[-1] == 64 for r in result.grid)
+    def test_a_band_runs_the_full_height(self):
+        result = fit("HI", NOTE, band=Band(colour=64, width=1))
+        assert [r[0] for r in result.grid] == [64] * NOTE.rows
 
-    def test_text_is_inset_and_never_overwrites_the_chrome(self):
-        result = fit("X" * 200, FLAGSHIP, chrome=Chrome(colour=63, weight="border"))
-        assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
+    def test_text_never_overwrites_the_band(self):
+        result = fit("X" * 200, FLAGSHIP, band=Band(colour=63, width=2))
+        assert all(r[0] == 63 and r[1] == 63 for r in result.grid)
 
-    def test_chrome_reduces_the_room_available(self):
-        # Fifteen characters with no break opportunity: fits one row of a Note
-        # as-is, needs two once a column goes to chrome.
+    def test_a_band_reduces_the_room_available(self):
+        # Fifteen characters with no break opportunity: one row of a Note as
+        # written, two once a column goes to the band.
         token = "ABCDEFGHIJKLMNO"
         plain = fit(token, NOTE)
-        ruled = fit(token, NOTE, chrome=Chrome(colour=63, weight="rule"))
-        assert ruled.rows_needed > plain.rows_needed
+        banded = fit(token, NOTE, band=Band(colour=63, width=1))
+        assert banded.rows_needed > plain.rows_needed
 
-    def test_no_chrome_is_unchanged(self):
-        assert fit("HI", NOTE, chrome=None).grid == fit("HI", NOTE).grid
+    def test_no_band_is_unchanged(self):
+        assert fit("HI", NOTE, band=None).grid == fit("HI", NOTE).grid
 
-    def test_chrome_composes_with_shortening(self):
-        # Overflows the ruled inner box (3 rows x 14 cols) as written -
-        # needs four rows - but the abbreviation ladder brings it down to
-        # three, so the ladder is load-bearing here, not incidental.
+    def test_a_band_wider_than_the_board_still_leaves_a_card(self):
+        result = fit("HI", NOTE, band=Band(colour=63, width=99))
+        assert result.error == ""
+        assert any(code != 63 for row in result.grid for code in row)
+
+    def test_a_band_composes_with_shortening(self):
+        # Overflows the banded inner box (3 rows x 14 cols) as written - it
+        # needs four rows - but the ladder brings it down to three, so the
+        # ladder is load-bearing here rather than incidental.
         message = "PLEASE TAKE THE BINS OUT TOMORROW MORNING"
-        without_shortening = fit(message, NOTE, chrome=Chrome(colour=63, weight="rule"))
-        assert not without_shortening.fits
+        band = Band(colour=63, width=1)
+        assert not fit(message, NOTE, band=band).fits
 
-        result = fit(
-            message,
-            NOTE,
-            chrome=Chrome(colour=63, weight="rule"),
-            shorten=True,
-        )
+        result = fit(message, NOTE, band=band, shorten=True)
         assert all(r[0] == 63 for r in result.grid)
         assert result.shortened != ""
         assert result.fits

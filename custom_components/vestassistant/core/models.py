@@ -10,14 +10,14 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
 import enum
 
-from .layout import Chrome
+from .layout import Band
 
 __all__ = [
     "DEFAULT_TIERS",
     "TIER_CONTENT",
     "TIER_CRITICAL",
     "TIER_TASK",
-    "Chrome",
+    "Band",
     "CursorState",
     "Decision",
     "Item",
@@ -26,7 +26,7 @@ __all__ = [
     "TierPolicy",
     "TierSet",
     "Trigger",
-    "resolve_chrome",
+    "resolve_band",
 ]
 
 TIER_CRITICAL = "critical"
@@ -86,11 +86,11 @@ class TierPolicy:
     dwell: timedelta | None = None
     """Overrides the global dwell for items in this tier."""
 
-    chrome: str = "none"
-    """How loud this tier's frame is: ``border``, ``rule`` or ``none``.
+    band: int = 0
+    """Columns of coloured band down the left edge. Zero draws none.
 
-    Severity decides the weight and the item decides the hue, so a green
-    critical card is still a full border - it just is not red.
+    Severity decides the width and the item decides the hue, so a green
+    critical card still gets the wider band - it just is not red.
     """
 
     colour: int | None = None
@@ -105,7 +105,7 @@ DEFAULT_TIERS: tuple[TierPolicy, ...] = (
         attention=True,
         preempts=True,
         quiet_hours=QuietHours.IGNORE,
-        chrome="border",
+        band=2,
         colour=63,
     ),
     TierPolicy(
@@ -115,7 +115,7 @@ DEFAULT_TIERS: tuple[TierPolicy, ...] = (
         attention=True,
         preempts=True,
         quiet_hours=QuietHours.DEFER,
-        chrome="rule",
+        band=1,
         colour=64,
     ),
     TierPolicy(
@@ -280,17 +280,17 @@ class SchedulerConfig:
     """How long to leave the board alone after a human writes to it directly."""
 
 
-def resolve_chrome(item: Item, tiers: TierSet) -> Chrome | None:
-    """The frame for an item, or None when its tier does not draw one.
+def resolve_band(item: Item, tiers: TierSet) -> Band | None:
+    """The band for an item, or None when its tier does not draw one.
 
-    Severity sets the weight, the item sets the hue. Kept here rather than in
+    Severity sets the width, the item sets the hue. Kept here rather than in
     layout so that layout stays ignorant of tiers, and here rather than in
     the scheduler so that it can be tested without a decision.
     """
     tier = tiers.get(item.tier)
-    if tier.chrome == "none":
+    if tier.band <= 0:
         return None
     colour = item.colour if item.colour is not None else tier.colour
     if colour is None:
         return None
-    return Chrome(colour=colour, weight=tier.chrome)
+    return Band(colour=colour, width=tier.band)

@@ -63,7 +63,7 @@ from .core.models import (
     TIER_TASK,
     Item,
     TierSet,
-    resolve_chrome,
+    resolve_band,
 )
 from .transport.base import VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
@@ -367,24 +367,24 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             # Checked here rather than at render time: finding out a message
             # does not fit because it is garbled on the wall is the bad
             # version of this feedback loop. The rendered card carries
-            # chrome, so validation has to reserve the same space or a
+            # band, so validation has to reserve the same space or a
             # message can validate here and still get truncated on the wall.
             geometry = self._geometry()
             raw_colour = user_input.get(CONF_COLOUR)
-            chrome = resolve_chrome(
+            band = resolve_band(
                 Item(
                     id="validate",
                     source="validate",
                     cards=("",),
                     tier=user_input[CONF_TIER],
-                    # The selector hands back a string ("66"); Item/Chrome
+                    # The selector hands back a string ("66"); Item/Band
                     # want an int.
                     colour=int(raw_colour) if raw_colour is not None else None,
                 ),
                 TierSet(),
             )
             results = [
-                fit(card.strip(), geometry, chrome=chrome)
+                fit(card.strip(), geometry, band=band)
                 for line in entries
                 for card in line.split("|")
             ]

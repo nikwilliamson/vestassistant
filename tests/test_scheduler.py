@@ -12,7 +12,7 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "custom_components" / "vestassistant"),
 )
 
-from core.layout import Chrome
+from core.layout import Band
 from core.models import (
     TIER_CONTENT,
     TIER_CRITICAL,
@@ -24,7 +24,7 @@ from core.models import (
     TierPolicy,
     TierSet,
     Trigger,
-    resolve_chrome,
+    resolve_band,
 )
 from core.scheduler import SUMMARY_ID, decide, in_quiet_hours
 
@@ -521,33 +521,33 @@ def test_refresh_after_the_refreshing_item_is_gone_advances_normally():
     assert d.text == "A"
 
 
-class TestChromeResolution:
-    def test_critical_gets_a_red_border(self):
+class TestBandResolution:
+    def test_critical_gets_a_two_column_red_band(self):
         item = Item(id="a", source="s", cards=("HI",), tier=TIER_CRITICAL)
-        assert resolve_chrome(item, TierSet()) == Chrome(colour=63, weight="border")
+        assert resolve_band(item, TierSet()) == Band(colour=63, width=2)
 
-    def test_task_gets_an_orange_rule(self):
+    def test_task_gets_a_one_column_orange_band(self):
         item = Item(id="a", source="s", cards=("HI",), tier=TIER_TASK)
-        assert resolve_chrome(item, TierSet()) == Chrome(colour=64, weight="rule")
+        assert resolve_band(item, TierSet()) == Band(colour=64, width=1)
 
     def test_content_gets_nothing(self):
         item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT)
-        assert resolve_chrome(item, TierSet()) is None
+        assert resolve_band(item, TierSet()) is None
 
     def test_an_item_can_override_the_hue(self):
         item = Item(id="a", source="s", cards=("HI",), tier=TIER_TASK, colour=66)
-        assert resolve_chrome(item, TierSet()) == Chrome(colour=66, weight="rule")
+        assert resolve_band(item, TierSet()) == Band(colour=66, width=1)
 
-    def test_an_override_does_not_give_content_a_frame(self):
-        # Severity decides whether there is a frame at all; the colour only
+    def test_an_override_does_not_give_content_a_band(self):
+        # Severity decides whether there is a band at all; the colour only
         # decides what hue it is.
         item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT, colour=66)
-        assert resolve_chrome(item, TierSet()) is None
+        assert resolve_band(item, TierSet()) is None
 
-    def test_weighted_tier_without_colour_draws_nothing_until_item_supplies_one(self):
-        # A tier can want a frame (chrome != "none") but have no default hue.
-        # That must fall through the *colour* guard, not the *weight* gate -
-        # and an item's own colour is enough to complete it.
+    def test_banded_tier_without_colour_draws_nothing_until_item_supplies_one(self):
+        # A tier can want a band (band > 0) but have no default hue. That must
+        # fall through the *colour* guard, not the *width* gate - and an item's
+        # own colour is enough to complete it.
         tiers = TierSet(
             (
                 TierPolicy(
@@ -556,12 +556,12 @@ class TestChromeResolution:
                     exclusive=False,
                     attention=False,
                     preempts=False,
-                    chrome="rule",
+                    band=1,
                 ),
             )
         )
         without_colour = Item(id="a", source="s", cards=("HI",), tier="dim")
-        assert resolve_chrome(without_colour, tiers) is None
+        assert resolve_band(without_colour, tiers) is None
 
         with_colour = Item(id="a", source="s", cards=("HI",), tier="dim", colour=65)
-        assert resolve_chrome(with_colour, tiers) == Chrome(colour=65, weight="rule")
+        assert resolve_band(with_colour, tiers) == Band(colour=65, width=1)
