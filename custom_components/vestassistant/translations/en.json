@@ -106,9 +106,14 @@
       "attention_count": { "name": "Needs attention" }
     },
     "binary_sensor": { "quiet_hours": { "name": "Quiet hours" } },
-    "switch": { "rotation": { "name": "Rotation" } },
+    "switch": {
+      "rotation": { "name": "Rotation" },
+      "clock": { "name": "Clock card" },
+      "forecast": { "name": "Forecast card" }
+    },
     "number": { "dwell": { "name": "Dwell" } },
-    "button": { "next": { "name": "Next message" } }
+    "button": { "next": { "name": "Next message" } },
+    "text": { "message": { "name": "Message" } }
   },
   "selector": {
     "transport": {

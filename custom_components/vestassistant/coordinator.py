@@ -104,6 +104,8 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         """
         self.rotation_enabled = True
         self.paused_until: datetime | None = None
+        self.typed_message: str = ""
+        """The last message typed straight at the board, for the text entity."""
 
         self._store: Store = Store(
             hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}"
@@ -123,6 +125,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         stored = await self._store.async_load() or {}
         self.cursor = _cursor_from_dict(stored.get("cursor"))
         self.rotation_enabled = stored.get("rotation_enabled", True)
+        self.typed_message = stored.get("typed_message", "")
         if written := stored.get("last_write_at"):
             # Survives a reload. Adding a source reloads the config entry and
             # builds a fresh coordinator; without this the spacing guard reset
@@ -221,9 +224,14 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         """Re-evaluate and, if the answer changed, write to the board."""
         now = dt_util.now()
 
-        if self.paused_until and now < self.paused_until:
-            self._schedule_wake(self.paused_until)
-            return
+        if self.paused_until:
+            if now < self.paused_until:
+                self._schedule_wake(self.paused_until)
+                return
+            # The pin has run out. Clear the typed message with it, so the
+            # text box stops claiming something the board no longer shows.
+            self.paused_until = None
+            self.typed_message = ""
 
         if not self.rotation_enabled:
             self._cancel_timer()
@@ -420,6 +428,13 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         self._schedule_wake(self.paused_until, Trigger.START)
         self.async_update_listeners()
 
+    async def async_release(self) -> None:
+        """Hand the board back to the rotation before a pin has run out."""
+        if self.paused_until is None:
+            return
+        self.paused_until = None
+        await self.async_tick(Trigger.START)
+
     async def async_set_dwell(self, minutes: float) -> None:
         self.scheduler_config = SchedulerConfig(
             dwell=timedelta(minutes=minutes),
@@ -442,6 +457,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             {
                 "cursor": _cursor_to_dict(self.cursor),
                 "rotation_enabled": self.rotation_enabled,
+                "typed_message": self.typed_message,
                 "last_write_at": (
                     self._last_write_at.isoformat() if self._last_write_at else None
                 ),
