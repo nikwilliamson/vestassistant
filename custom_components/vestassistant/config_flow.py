@@ -35,8 +35,6 @@ from .const import (
     CONF_FORECAST,
     CONF_FORECAST_ENTITY,
     CONF_HOST,
-    CONF_QUIET_END,
-    CONF_QUIET_START,
     CONF_SOURCE_TYPE,
     CONF_SUMMARY_TEMPLATE,
     CONF_SUMMARY_THRESHOLD,
@@ -243,8 +241,26 @@ class VestassistantOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """The settings that have no sensible entity.
+
+        Dwell, the summary threshold, quiet hours, the clock and the forecast
+        all have their own entities, so they are not repeated here - they
+        live in the same options dict and would otherwise be two controls for
+        one value. What is left is a free-text template, a choice of
+        strategy, and an entity picker.
+        """
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            # Merge rather than replace: the entities write into these same
+            # options, and returning only this form's fields would wipe them.
+            # Read with .get so clearing the weather entity actually clears it.
+            return self.async_create_entry(
+                data={
+                    **self.config_entry.options,
+                    CONF_SUMMARY_TEMPLATE: user_input[CONF_SUMMARY_TEMPLATE],
+                    CONF_BLEND: user_input[CONF_BLEND],
+                    CONF_FORECAST_ENTITY: user_input.get(CONF_FORECAST_ENTITY),
+                }
+            )
 
         options = self.config_entry.options
         return self.async_show_form(
@@ -252,37 +268,11 @@ class VestassistantOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_DWELL,
-                        default=options.get(CONF_DWELL, DEFAULT_DWELL_MINUTES),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=240, step=1, unit_of_measurement="min"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_SUMMARY_THRESHOLD,
-                        default=options.get(
-                            CONF_SUMMARY_THRESHOLD, DEFAULT_SUMMARY_THRESHOLD
-                        ),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(min=0, max=20, step=1)
-                    ),
-                    vol.Required(
                         CONF_SUMMARY_TEMPLATE,
                         default=options.get(
                             CONF_SUMMARY_TEMPLATE, DEFAULT_SUMMARY_TEMPLATE
                         ),
                     ): str,
-                    vol.Optional(
-                        CONF_QUIET_START,
-                        description={
-                            "suggested_value": options.get(CONF_QUIET_START)
-                        },
-                    ): selector.TimeSelector(),
-                    vol.Optional(
-                        CONF_QUIET_END,
-                        description={"suggested_value": options.get(CONF_QUIET_END)},
-                    ): selector.TimeSelector(),
                     vol.Required(
                         CONF_BLEND, default=options.get(CONF_BLEND, DEFAULT_BLEND)
                     ): selector.SelectSelector(
@@ -292,23 +282,6 @@ class VestassistantOptionsFlow(OptionsFlow):
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
-                    vol.Required(
-                        CONF_CLOCK, default=options.get(CONF_CLOCK, False)
-                    ): selector.BooleanSelector(),
-                    vol.Required(
-                        CONF_CLOCK_REFRESH,
-                        default=options.get(CONF_CLOCK_REFRESH, DEFAULT_CLOCK_REFRESH),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=60, step=1, unit_of_measurement="min"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_FORECAST, default=options.get(CONF_FORECAST, False)
-                    ): selector.BooleanSelector(),
-                    # Optional because the switch above may be off. Turning
-                    # the forecast on without naming an entity simply
-                    # contributes nothing, rather than failing setup.
                     vol.Optional(
                         CONF_FORECAST_ENTITY,
                         description={
@@ -407,7 +380,7 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             step_id="list",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="Messages"): str,
+                    vol.Required("name", default="Typed messages"): str,
                     vol.Required(CONF_TIER, default=TIER_CONTENT): TIER_SELECTOR,
                     vol.Optional(
                         CONF_COLOUR,
@@ -469,7 +442,7 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             step_id="declared",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default="Declared cards"): str,
+                    vol.Required("name", default="Entity messages"): str,
                     vol.Optional(CONF_ENTITY_ID): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain=["binary_sensor", "input_boolean", "sensor"],

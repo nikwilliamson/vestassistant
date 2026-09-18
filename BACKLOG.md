@@ -23,9 +23,7 @@ Still open:
   would be the same artwork as the icon, and brands says to submit only the
   icons in that case. `brand/source.png` is the full-resolution original the
   two are generated from.
-- **`abort.reconfigure_successful` in `config_subentries.source` is dead.**
-  `SourceSubentryFlow` has no reconfigure step, so nothing can emit it. Either
-  add the step or drop the string.
+Resolved: the dead `abort.reconfigure_successful` string has been dropped.
 
 ## Quality scale
 

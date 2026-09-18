@@ -48,30 +48,21 @@ class RotationSwitch(VestassistantEntity, SwitchEntity):
 class _OptionSwitch(VestassistantEntity, SwitchEntity):
     """A built-in card, switchable from a dashboard or an automation.
 
-    Backed by the entry's options rather than by runtime state, so there is
-    one source of truth and the setting reads the same in Settings as it does
-    on the switch. Writing an option reloads the entry, which is what rebuilds
-    the source list - the board itself is undisturbed, because the rotation
-    cursor is persisted.
+    Backed by the entry's options, like every other setting that has an
+    entity, so the value reads the same wherever you look at it.
     """
 
     _option: str
-
-    async def _async_write(self, value: bool) -> None:
-        entry = self.coordinator.config_entry
-        self.hass.config_entries.async_update_entry(
-            entry, options={**entry.options, self._option: value}
-        )
 
     @property
     def is_on(self) -> bool:
         return bool(self.coordinator.config_entry.options.get(self._option))
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self._async_write(True)
+        self.coordinator.async_set_option(self._option, True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._async_write(False)
+        self.coordinator.async_set_option(self._option, False)
 
 
 class ClockSwitch(_OptionSwitch):

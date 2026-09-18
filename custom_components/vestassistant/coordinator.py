@@ -435,18 +435,22 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         self.paused_until = None
         await self.async_tick(Trigger.START)
 
-    async def async_set_dwell(self, minutes: float) -> None:
-        self.scheduler_config = SchedulerConfig(
-            dwell=timedelta(minutes=minutes),
-            summary_threshold=self.scheduler_config.summary_threshold,
-            summary_template=self.scheduler_config.summary_template,
-            quiet_start=self.scheduler_config.quiet_start,
-            quiet_end=self.scheduler_config.quiet_end,
-            tiers=self.scheduler_config.tiers,
-            blend=self.scheduler_config.blend,
-            foreign_write_grace=self.scheduler_config.foreign_write_grace,
+    @callback
+    def async_set_option(self, key: str, value) -> None:
+        """Write one option and let the entry reload apply it.
+
+        The entry's options are the single source of truth: a value set from
+        an entity reads back the same in Settings, and survives a restart,
+        which in-memory state did not. Reloading rebuilds the scheduler and
+        the source list; the board is undisturbed, because the rotation
+        cursor is persisted.
+        """
+        entry = self.config_entry
+        if entry.options.get(key) == value:
+            return
+        self.hass.config_entries.async_update_entry(
+            entry, options={**entry.options, key: value}
         )
-        await self.async_tick(Trigger.MANUAL)
 
     # ------------------------------------------------------------------
     # persistence
