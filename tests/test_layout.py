@@ -174,6 +174,12 @@ class TestChrome:
         assert all(c == 63 for c in result.grid[0])
         assert all(c == 63 for c in result.grid[-1])
         assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
+        # The ring is exactly one cell deep - a two-cell-deep ring would still
+        # pass every assertion above.
+        assert result.grid[1][1] == 0
+        assert result.grid[1][-2] == 0
+        assert result.grid[-2][1] == 0
+        assert result.grid[-2][-2] == 0
 
     def test_border_degrades_to_edge_columns_on_a_note(self):
         result = fit("HI", NOTE, chrome=Chrome(colour=63, weight="border"))
@@ -202,10 +208,19 @@ class TestChrome:
         assert fit("HI", NOTE, chrome=None).grid == fit("HI", NOTE).grid
 
     def test_chrome_composes_with_shortening(self):
+        # Overflows the ruled inner box (3 rows x 14 cols) as written -
+        # needs four rows - but the abbreviation ladder brings it down to
+        # three, so the ladder is load-bearing here, not incidental.
+        message = "PLEASE TAKE THE BINS OUT TOMORROW MORNING"
+        without_shortening = fit(message, NOTE, chrome=Chrome(colour=63, weight="rule"))
+        assert not without_shortening.fits
+
         result = fit(
-            "TAKE THE BINS OUT TOMORROW",
+            message,
             NOTE,
             chrome=Chrome(colour=63, weight="rule"),
             shorten=True,
         )
         assert all(r[0] == 63 for r in result.grid)
+        assert result.shortened != ""
+        assert result.fits
