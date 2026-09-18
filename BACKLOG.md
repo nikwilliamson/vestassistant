@@ -34,14 +34,16 @@ Bronze blockers:
 - `config-flow-test-coverage`
 - `test-coverage`
 - `brands` — needs a PR to home-assistant/brands (icon and logo are in `brand/`)
-- `docs-removal-instructions`
+
+Resolved: `docs-removal-instructions` — see "Removing it" in the README.
 
 Silver:
 
 - `entity-unavailable` — entities should go unavailable when the board can't
   be reached, rather than holding the last known grid
 - `parallel-updates`
-- `docs-troubleshooting`
+
+Resolved: `docs-troubleshooting` — see "Troubleshooting" in the README.
 
 Gold and beyond: `discovery`, `diagnostics`, `reconfiguration-flow`,
 `repair-issues`, `strict-typing`.
