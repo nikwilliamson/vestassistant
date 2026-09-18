@@ -103,6 +103,45 @@ with anything else:
 
 In a message list, use a pipe: `SETUP | PUNCHLINE`.
 
+### Colour
+
+Every card carries a frame that says how much it matters. A `critical` item
+gets a full border, a `task` gets a thin rule, and `content` gets none - so
+you can tell a hazard from a chore from across the room without reading
+either.
+
+Severity decides how loud the frame is; you choose the hue when you add the
+source, or per item:
+
+```yaml
+  - action: vestassistant.add_item
+    data:
+      id: bins
+      message: BINS TONIGHT
+      tier: task
+      colour: 66
+```
+
+Colours are character codes, and they work anywhere a message does - in a
+list, in a declared card, in `add_item`:
+
+```yaml
+  - "{63}{63} STOVE LEFT ON {63}{63}"
+```
+
+The palette is 63 red, 64 orange, 65 yellow, 66 green, 67 blue, 68 violet.
+Codes 69, 70 and 71 are deliberately not offered: 71 is unavailable over the
+local API, and 69 and 70 mean different things on a black board than on a
+white one, which neither API reports.
+
+### Messages that nearly fit
+
+Rather than cutting a message off, Vestassistant shortens it - `TOMORROW`
+becomes `TMRW`, `AND` becomes `&`, and articles go last of all. Only when
+none of that is enough does it truncate. `vestassistant.validate` reports
+which rung it had to use, so you can see it coming while you are still
+writing.
+
 ### Checking what fits
 
 ```yaml
