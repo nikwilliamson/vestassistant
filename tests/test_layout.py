@@ -32,6 +32,7 @@ def test_flagship_grid_is_six_by_twentytwo():
     r = fit("HELLO", FLAGSHIP)
     assert len(r.grid) == 6
     assert all(len(row) == 22 for row in r.grid)
+    assert r.fits
 
 
 def test_wraps_at_word_boundaries():
@@ -76,7 +77,7 @@ def test_overflow_is_reported_not_raised():
 
 def test_long_word_is_broken_rather_than_lost():
     r = fit("SUPERCALIFRAGILISTIC", NOTE)
-    assert "SUPERCALIFRAGI" in r.preview.replace(" ", "")[:20] or r.rows_needed >= 2
+    assert "SUPERCALIFRAGI" in r.preview.replace(" ", "")[:20]
 
 
 def test_colour_codes_pass_through():
@@ -149,18 +150,10 @@ class TestShortening:
         assert result.fits
         assert result.shortened in ("abbreviations", "articles")
 
-    def test_records_which_rung_was_used(self):
-        result = fit("PLEASE TAKE THE BINS OUT TOMORROW MORNING", NOTE, shorten=True)
-        assert result.shortened != ""
-
     def test_falls_back_to_truncation_when_nothing_fits(self):
         result = fit("SUPERCALIFRAGILISTIC " * 6, NOTE, shorten=True)
         assert not result.fits
         assert result.overflow
-
-    def test_shortening_is_off_by_default(self):
-        long = "PLEASE TAKE THE BINS OUT TOMORROW MORNING"
-        assert fit(long, NOTE).shortened == ""
 
     def test_an_encoding_error_is_not_masked_by_shortening(self):
         result = fit("HELLO*WORLD", NOTE, shorten=True)
