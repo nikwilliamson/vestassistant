@@ -4,17 +4,23 @@ Things worth doing, roughly in the order they start to hurt.
 
 ## Release plumbing
 
-- **Delete the manifest-stamping step from `.github/workflows/release.yaml`.**
-  It rewrites `manifest.json` inside the CI checkout and never commits the
-  result, and `hacs.json` sets no `zip_release`, so HACS installs from the tag
-  rather than from the attached zip. The stamp is decorative: the tag still
-  carries whatever version was committed. Bumping `manifest.json` by hand in
-  the same commit as the tag is the reliable path, and it's what the step
-  pretends to automate.
-- **Decide whether to use `zip_release` at all.** If the zip becomes the
-  install source, stamping in CI starts working and the manual bump goes away.
-  If not, drop the zip asset too and keep the release plain. Right now it's
-  half of each.
+Resolved in 0.1.2: the release workflow is gone. It stamped `manifest.json`
+inside the CI checkout without committing the result, and `hacs.json` sets no
+`zip_release`, so HACS installed from the tag and the stamp did nothing. It
+also could not have attached its zip anyway - the job had no
+`permissions: contents: write` and failed on `action-gh-release` with
+"Resource not accessible by integration". Releases are manual now, which is
+what the process already was in practice. See "Releasing" in the README.
+
+Still open:
+
+- **Register the brand with `home-assistant/brands`.** The last HACS check
+  still failing. Assets are in `brand/`. Alternatively HACS accepts them at
+  `custom_components/vestassistant/brand/icon.png`, but the brands repo is the
+  route that also makes the icon show up in Home Assistant itself.
+- **`abort.reconfigure_successful` in `config_subentries.source` is dead.**
+  `SourceSubentryFlow` has no reconfigure step, so nothing can emit it. Either
+  add the step or drop the string.
 
 ## Quality scale
 

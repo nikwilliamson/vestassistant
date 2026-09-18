@@ -57,7 +57,7 @@
   },
   "config_subentries": {
     "source": {
-      "title": "Add a source",
+      "initiate_flow": { "user": "Add a source" },
       "step": {
         "user": {
           "title": "What kind of source?",

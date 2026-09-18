@@ -155,6 +155,21 @@ pip install pytest vesta
 pytest -q
 ```
 
+### Releasing
+
+HACS compares the `version` in `manifest.json`, so bump it in the same commit
+as the tag. Nothing stamps it for you.
+
+```bash
+# edit custom_components/vestassistant/manifest.json
+git commit -am "Release 0.1.3"
+git tag v0.1.3 && git push && git push --tags
+gh release create v0.1.3 --title v0.1.3 --notes "..."
+```
+
+Until a release exists HACS tracks the default branch and never shows an
+update badge; once one does, every later version appears as an update.
+
 ## License
 
 MIT
