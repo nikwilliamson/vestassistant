@@ -357,18 +357,27 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             self.async_update_listeners()
 
     async def async_pin(self, message: str, duration: timedelta) -> None:
-        """Take the board now, then hand it back to the rotation."""
-        now = dt_util.now()
-        self.paused_until = now + duration
+        """Take the board now, then hand it back to the rotation.
+
+        Nothing about the board or the scheduler changes until the write has
+        actually landed: a message that cannot be encoded, or a board that
+        refuses the write, must leave the rotation exactly as it was rather
+        than pausing it for ``duration`` while showing nothing.
+        """
         geometry = self.geometry
         if geometry is None:
             return
         result = fit(message, geometry, align="center", valign="middle")
+        if result.error:
+            _LOGGER.error("cannot pin %r: %s", message, result.error)
+            return
+        now = dt_util.now()
         try:
             await self.transport.write(result.grid)
         except VestaboardError as err:
             _LOGGER.error("could not pin message: %s", err)
             return
+        self.paused_until = now + duration
         self._last_written_grid = result.grid
         self._last_write_at = now
         self.cursor = self.cursor.with_(last_rendered=None)
