@@ -108,7 +108,9 @@ In a message list, use a pipe: `SETUP | PUNCHLINE`.
 Every card carries a frame that says how much it matters. A `critical` item
 gets a full border, a `task` gets a thin rule, and `content` gets none - so
 you can tell a hazard from a chore from across the room without reading
-either.
+either. Severity decides *whether* there is a frame at all; you choose the
+hue. A `content` card that names a colour still gets no frame, because there
+is nothing for the colour to tint.
 
 Severity decides how loud the frame is; you choose the hue when you add the
 source, or per item:
@@ -134,13 +136,15 @@ Codes 69, 70 and 71 are deliberately not offered: 71 is unavailable over the
 local API, and 69 and 70 mean different things on a black board than on a
 white one, which neither API reports.
 
+On a three-row Vestaboard Note, a `critical` card's full border becomes two
+edge columns, because a full ring would leave only one row for text.
+
 ### Messages that nearly fit
 
 Rather than cutting a message off, Vestassistant shortens it - `TOMORROW`
 becomes `TMRW`, `AND` becomes `&`, and articles go last of all. Only when
-none of that is enough does it truncate. `vestassistant.validate` reports
-which rung it had to use, so you can see it coming while you are still
-writing.
+none of that is enough does it truncate. Use `vestassistant.validate` (see
+below) to see which rung will be used before the message goes live.
 
 ### Checking what fits
 
@@ -151,8 +155,10 @@ data:
 response_variable: result
 ```
 
-Returns whether it fits, how many rows it needs, an ASCII preview of the
-wrapping, and anything that overflowed.
+Returns `ok` (whether it fits), `rows` (how many it needs), an ASCII preview
+of the wrapping, `overflow` (anything that did not fit), `shortened` (which
+fitting rung was used, if any), and `error` (any character that the board
+cannot encode).
 
 ## Installation
 
