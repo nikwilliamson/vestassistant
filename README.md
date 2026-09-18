@@ -108,12 +108,10 @@ In a message list, use a pipe: `SETUP | PUNCHLINE`.
 Every card carries a frame that says how much it matters. A `critical` item
 gets a full border, a `task` gets a thin rule, and `content` gets none - so
 you can tell a hazard from a chore from across the room without reading
-either. Severity decides *whether* there is a frame at all; you choose the
-hue. A `content` card that names a colour still gets no frame, because there
-is nothing for the colour to tint.
-
-Severity decides how loud the frame is; you choose the hue when you add the
-source, or per item:
+either. Severity decides whether there is a frame and how loud it is; you
+choose the hue when you add the source, or per item. A `content` card that
+names a colour still gets no frame, because there is nothing for the colour
+to tint.
 
 ```yaml
   - action: vestassistant.add_item
@@ -155,10 +153,10 @@ data:
 response_variable: result
 ```
 
-Returns `ok` (whether it fits), `rows` (how many it needs), an ASCII preview
-of the wrapping, `overflow` (anything that did not fit), `shortened` (which
-fitting rung was used, if any), and `error` (any character that the board
-cannot encode).
+Returns `fits`, `rows_needed`, `rows_available`, `columns`, `board`,
+`preview` (an ASCII preview of the wrapping), `overflow` (anything that did
+not fit), `error` (any character that the board cannot encode, empty when all
+encoded cleanly), and `shortened` (which fitting rung was used, empty if none).
 
 ## Installation
 
