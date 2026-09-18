@@ -10,11 +10,14 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
 import enum
 
+from .layout import Chrome
+
 __all__ = [
     "DEFAULT_TIERS",
     "TIER_CONTENT",
     "TIER_CRITICAL",
     "TIER_TASK",
+    "Chrome",
     "CursorState",
     "Decision",
     "Item",
@@ -23,6 +26,7 @@ __all__ = [
     "TierPolicy",
     "TierSet",
     "Trigger",
+    "resolve_chrome",
 ]
 
 TIER_CRITICAL = "critical"
@@ -82,6 +86,16 @@ class TierPolicy:
     dwell: timedelta | None = None
     """Overrides the global dwell for items in this tier."""
 
+    chrome: str = "none"
+    """How loud this tier's frame is: ``border``, ``rule`` or ``none``.
+
+    Severity decides the weight and the item decides the hue, so a green
+    critical card is still a full border - it just is not red.
+    """
+
+    colour: int | None = None
+    """The default hue for this tier's frame, overridable per item."""
+
 
 DEFAULT_TIERS: tuple[TierPolicy, ...] = (
     TierPolicy(
@@ -91,6 +105,8 @@ DEFAULT_TIERS: tuple[TierPolicy, ...] = (
         attention=True,
         preempts=True,
         quiet_hours=QuietHours.IGNORE,
+        chrome="border",
+        colour=63,
     ),
     TierPolicy(
         name=TIER_TASK,
@@ -99,6 +115,8 @@ DEFAULT_TIERS: tuple[TierPolicy, ...] = (
         attention=True,
         preempts=True,
         quiet_hours=QuietHours.DEFER,
+        chrome="rule",
+        colour=64,
     ),
     TierPolicy(
         name=TIER_CONTENT,
@@ -168,6 +186,12 @@ class Item:
     For an item whose text is a function of the clock. The scheduler brings
     the next wake forward to match, and holds the original dwell deadline -
     refreshing rewrites the card, it does not win more board time.
+    """
+
+    colour: int | None = None
+    """Overrides the tier's default hue for this item's frame.
+
+    One of 63-68. Whether there is a frame at all is the tier's decision.
     """
 
     meta: dict[str, str] = field(default_factory=dict, compare=False)
@@ -254,3 +278,19 @@ class SchedulerConfig:
 
     foreign_write_grace: timedelta = timedelta(minutes=30)
     """How long to leave the board alone after a human writes to it directly."""
+
+
+def resolve_chrome(item: Item, tiers: TierSet) -> Chrome | None:
+    """The frame for an item, or None when its tier does not draw one.
+
+    Severity sets the weight, the item sets the hue. Kept here rather than in
+    layout so that layout stays ignorant of tiers, and here rather than in
+    the scheduler so that it can be tested without a decision.
+    """
+    tier = tiers.get(item.tier)
+    if tier.chrome == "none":
+        return None
+    colour = item.colour if item.colour is not None else tier.colour
+    if colour is None:
+        return None
+    return Chrome(colour=colour, weight=tier.chrome)

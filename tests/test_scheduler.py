@@ -12,6 +12,7 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "custom_components" / "vestassistant"),
 )
 
+from core.layout import Chrome
 from core.models import (
     TIER_CONTENT,
     TIER_CRITICAL,
@@ -23,6 +24,7 @@ from core.models import (
     TierPolicy,
     TierSet,
     Trigger,
+    resolve_chrome,
 )
 from core.scheduler import SUMMARY_ID, decide, in_quiet_hours
 
@@ -517,3 +519,27 @@ def test_refresh_after_the_refreshing_item_is_gone_advances_normally():
     first = run([clock("11:00 PM")])
     d = run([item("a")], state=first.state, trigger=Trigger.REFRESH, now=NOW + FIVE)
     assert d.text == "A"
+
+
+class TestChromeResolution:
+    def test_critical_gets_a_red_border(self):
+        item = Item(id="a", source="s", cards=("HI",), tier=TIER_CRITICAL)
+        assert resolve_chrome(item, TierSet()) == Chrome(colour=63, weight="border")
+
+    def test_task_gets_an_orange_rule(self):
+        item = Item(id="a", source="s", cards=("HI",), tier=TIER_TASK)
+        assert resolve_chrome(item, TierSet()) == Chrome(colour=64, weight="rule")
+
+    def test_content_gets_nothing(self):
+        item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT)
+        assert resolve_chrome(item, TierSet()) is None
+
+    def test_an_item_can_override_the_hue(self):
+        item = Item(id="a", source="s", cards=("HI",), tier=TIER_TASK, colour=66)
+        assert resolve_chrome(item, TierSet()) == Chrome(colour=66, weight="rule")
+
+    def test_an_override_does_not_give_content_a_frame(self):
+        # Severity decides whether there is a frame at all; the colour only
+        # decides what hue it is.
+        item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT, colour=66)
+        assert resolve_chrome(item, TierSet()) is None
