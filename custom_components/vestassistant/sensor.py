@@ -38,7 +38,10 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        decision = self.coordinator.decision
+        # The displayed decision, not the raw scheduler decision: a card the
+        # board could not render (WriteOutcome.SKIPPED) must not be named
+        # here either, or the state and its attributes would disagree.
+        decision = self.coordinator.displayed_decision
         if decision is None:
             return {}
         item = decision.item

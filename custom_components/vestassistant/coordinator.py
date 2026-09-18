@@ -84,6 +84,14 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
 
         self.cursor = CursorState()
         self.decision: Decision | None = None
+        self._displayed_decision: Decision | None = None
+        """The last decision the board actually shows.
+
+        Distinct from ``decision``: a SKIPPED render leaves the board
+        untouched, so anything reported to the user (the sensor's state) must
+        keep pointing at whatever is really on the wall rather than the card
+        that failed to reach it.
+        """
         self.rotation_enabled = True
         self.paused_until: datetime | None = None
 
@@ -238,6 +246,13 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 # write that failed should not also hold the board for an item
                 # that may be what the board is unhappy about.
                 wake_trigger = Trigger.DWELL
+            elif outcome is WriteOutcome.WRITTEN:
+                self._displayed_decision = decision
+            # FAILED, DEFERRED and SKIPPED all leave the board showing
+            # whatever _displayed_decision already points at.
+        else:
+            # No write needed because the board already shows this.
+            self._displayed_decision = decision
 
         self._schedule_wake(wake, wake_trigger)
         self.async_update_listeners()
@@ -421,9 +436,18 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
 
     @property
     def current_text(self) -> str | None:
-        if self.decision is None:
+        if self._displayed_decision is None:
             return None
-        return self.decision.text
+        return self._displayed_decision.text
+
+    @property
+    def displayed_decision(self) -> Decision | None:
+        """The decision that describes what the board is actually showing.
+
+        Unlike ``decision``, this does not advance past a card the board
+        rejected - see ``async_tick``.
+        """
+        return self._displayed_decision
 
     @property
     def attention_count(self) -> int:
