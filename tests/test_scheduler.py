@@ -543,3 +543,25 @@ class TestChromeResolution:
         # decides what hue it is.
         item = Item(id="a", source="s", cards=("HI",), tier=TIER_CONTENT, colour=66)
         assert resolve_chrome(item, TierSet()) is None
+
+    def test_weighted_tier_without_colour_draws_nothing_until_item_supplies_one(self):
+        # A tier can want a frame (chrome != "none") but have no default hue.
+        # That must fall through the *colour* guard, not the *weight* gate -
+        # and an item's own colour is enough to complete it.
+        tiers = TierSet(
+            (
+                TierPolicy(
+                    name="dim",
+                    rank=5,
+                    exclusive=False,
+                    attention=False,
+                    preempts=False,
+                    chrome="rule",
+                ),
+            )
+        )
+        without_colour = Item(id="a", source="s", cards=("HI",), tier="dim")
+        assert resolve_chrome(without_colour, tiers) is None
+
+        with_colour = Item(id="a", source="s", cards=("HI",), tier="dim", colour=65)
+        assert resolve_chrome(with_colour, tiers) == Chrome(colour=65, weight="rule")
