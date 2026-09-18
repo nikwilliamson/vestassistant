@@ -41,6 +41,8 @@ from .const import (
     CONF_FORECAST_ENTITY,
     CONF_HOST,
     CONF_HUES,
+    CONF_LOOKAHEAD_DAYS,
+    CONF_MAX_EVENTS,
     CONF_PATTERNS,
     CONF_SOURCE_TYPE,
     CONF_SUMMARY_TEMPLATE,
@@ -51,9 +53,12 @@ from .const import (
     DEFAULT_BLEND,
     DEFAULT_CLOCK_REFRESH,
     DEFAULT_DWELL_MINUTES,
+    DEFAULT_LOOKAHEAD_DAYS,
+    DEFAULT_MAX_EVENTS,
     DEFAULT_SUMMARY_TEMPLATE,
     DEFAULT_SUMMARY_THRESHOLD,
     DOMAIN,
+    SOURCE_CALENDAR,
     SOURCE_DECLARED,
     SOURCE_LIST,
     SOURCE_PATTERN,
@@ -396,6 +401,8 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             return await self.async_step_declared()
         if kind == SOURCE_PATTERN:
             return await self.async_step_pattern()
+        if kind == SOURCE_CALENDAR:
+            return await self.async_step_calendar()
         return await self.async_step_list()
 
     # -- picking a kind ---------------------------------------------------
@@ -411,6 +418,8 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                 return await self.async_step_todo()
             if kind == SOURCE_PATTERN:
                 return await self.async_step_pattern()
+            if kind == SOURCE_CALENDAR:
+                return await self.async_step_calendar()
             return await self.async_step_declared()
 
         return self.async_show_form(
@@ -424,6 +433,7 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                                     SOURCE_LIST,
                                     SOURCE_TODO,
                                     SOURCE_DECLARED,
+                                    SOURCE_CALENDAR,
                                     SOURCE_PATTERN,
                                 ],
                                 translation_key="source_type",
@@ -567,6 +577,62 @@ class SourceSubentryFlow(ConfigSubentryFlow):
                     ),
                     vol.Required(
                         CONF_TIER, default=current.get(CONF_TIER, TIER_TASK)
+                    ): TIER_SELECTOR,
+                    vol.Optional(
+                        CONF_COLOUR,
+                        description={"suggested_value": current.get(CONF_COLOUR)},
+                    ): COLOUR_SELECTOR,
+                }
+            ),
+        )
+
+    async def async_step_calendar(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        current = self._current()
+        if user_input is not None:
+            return self._save(
+                user_input["name"],
+                {
+                    CONF_SOURCE_TYPE: SOURCE_CALENDAR,
+                    CONF_ENTITY_ID: user_input[CONF_ENTITY_ID],
+                    CONF_LOOKAHEAD_DAYS: int(user_input[CONF_LOOKAHEAD_DAYS]),
+                    CONF_MAX_EVENTS: int(user_input[CONF_MAX_EVENTS]),
+                    CONF_TIER: user_input[CONF_TIER],
+                    CONF_COLOUR: user_input.get(CONF_COLOUR),
+                },
+            )
+        return self.async_show_form(
+            step_id="calendar",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("name", default=self._name("Calendar")): str,
+                    vol.Required(
+                        CONF_ENTITY_ID,
+                        description={"suggested_value": current.get(CONF_ENTITY_ID)},
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="calendar")
+                    ),
+                    vol.Required(
+                        CONF_LOOKAHEAD_DAYS,
+                        default=current.get(
+                            CONF_LOOKAHEAD_DAYS, DEFAULT_LOOKAHEAD_DAYS
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1, max=14, mode=selector.NumberSelectorMode.BOX
+                        )
+                    ),
+                    vol.Required(
+                        CONF_MAX_EVENTS,
+                        default=current.get(CONF_MAX_EVENTS, DEFAULT_MAX_EVENTS),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1, max=10, mode=selector.NumberSelectorMode.BOX
+                        )
+                    ),
+                    vol.Required(
+                        CONF_TIER, default=current.get(CONF_TIER, TIER_CONTENT)
                     ): TIER_SELECTOR,
                     vol.Optional(
                         CONF_COLOUR,

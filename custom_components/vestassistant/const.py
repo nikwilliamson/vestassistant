@@ -38,17 +38,22 @@ CONF_COLOUR: Final = "colour"
 CONF_ENTITY_ID: Final = "entity_id"
 CONF_PATTERNS: Final = "patterns"
 CONF_HUES: Final = "hues"
+CONF_LOOKAHEAD_DAYS: Final = "lookahead_days"
+CONF_MAX_EVENTS: Final = "max_events"
 
 SUBENTRY_SOURCE: Final = "source"
 SOURCE_LIST: Final = "list"
 SOURCE_TODO: Final = "todo"
 SOURCE_DECLARED: Final = "declared"
 SOURCE_PATTERN: Final = "pattern"
+SOURCE_CALENDAR: Final = "calendar"
 
 DEFAULT_DWELL_MINUTES: Final = 20
 DEFAULT_SUMMARY_THRESHOLD: Final = 3
 DEFAULT_SUMMARY_TEMPLATE: Final = "YOU HAVE {n} THINGS THAT NEED YOU."
 DEFAULT_BLEND: Final = "alternate"
+DEFAULT_LOOKAHEAD_DAYS: Final = 2
+DEFAULT_MAX_EVENTS: Final = 3
 
 #: Minutes between rewrites of the clock card while it is on the board. Every
 #: rewrite is a physical flip, so this is deliberately not one minute.

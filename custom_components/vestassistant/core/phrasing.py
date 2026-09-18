@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-__all__ = ["CONDITIONS", "EVENING_HOUR", "clock_text", "forecast_text"]
+from .layout import ROW_BREAK
+
+__all__ = ["CONDITIONS", "EVENING_HOUR", "clock_text", "event_text", "forecast_text"]
 
 #: The hour at which the card stops describing today and starts describing
 #: tonight. Five is early enough to be useful before dark in winter.
@@ -86,3 +88,44 @@ def forecast_text(
     else:
         return None
     return f"{body} {period}."
+
+
+def _clock(when: datetime) -> str:
+    """``3 PM`` on the hour, ``3:30 PM`` otherwise. Tiles are precious."""
+    hour = when.hour % 12 or 12
+    meridiem = "AM" if when.hour < 12 else "PM"
+    if when.minute == 0:
+        return f"{hour} {meridiem}"
+    return f"{hour}:{when.minute:02d} {meridiem}"
+
+
+def event_text(
+    summary: str,
+    start: datetime,
+    end: datetime,
+    now: datetime,
+    *,
+    all_day: bool = False,
+) -> str:
+    """A calendar event as a card: when on the first row, what below it.
+
+    "When" is relative because a board is read at a glance: NOW while the
+    event is on, TODAY or TOMORROW with a time, the weekday inside a week,
+    and month and day beyond that. An all-day event has no time to show.
+    The row break is what lets the summary wrap on its own without the time
+    being pushed onto the second row.
+    """
+    if not all_day and start <= now < end:
+        when = "NOW"
+    else:
+        days = (start.date() - now.date()).days
+        if days <= 0:
+            day = "TODAY"
+        elif days == 1:
+            day = "TOMORROW"
+        elif days < 7:
+            day = start.strftime("%a").upper()
+        else:
+            day = f"{start.strftime('%b').upper()} {start.day}"
+        when = day if all_day else f"{day} {_clock(start)}"
+    return f"{when}{ROW_BREAK}{summary.strip()}"

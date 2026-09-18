@@ -57,13 +57,14 @@ see [Entities](#entities). Three things have no sensible entity and live in
 
 ## Sources
 
-**Settings → Devices & Services → Vestassistant → Add source.** Four kinds:
+**Settings → Devices & Services → Vestassistant → Add source.** Five kinds:
 
 | Source | |
 | --- | --- |
 | **Messages you type here** | One per box, rotating in the order you write them. A `\|` starts a new row on the board, so `GREAT SCOTT\|\|- DOC BROWN` is three rows with a blank one between. This is the resting state of the board — what shows when nothing needs you. Checked against your board as you save, so you find out something does not fit while you can still reword it |
 | **Items from a to-do list** | Every incomplete item becomes a message. Tick it off and it leaves the board |
 | **Messages carried by other entities** | For wording that belongs next to whatever raises it. Any entity that is `on` and has a `message` attribute becomes a message while it stays on — no automation needed. See [docs/automations.md](docs/automations.md) |
+| **Events from a calendar** | Upcoming events from any calendar entity, one per card — `TOMORROW 3 PM` on the first row, the event below it, `NOW` while it is on. Choose how many days ahead and how many events at most. A card leaves the board when its event ends |
 | **Colours and patterns** | Decorative fills for the board between messages: rainbow, stripes, a wash, checkerboard, a frame, confetti, a mosaic, and a sun that paints dawn, day, dusk and night. Each one you tick is a content card. They drift once an hour so an idle board is not flapping |
 
 Each source has a **tier** and an optional **colour**.

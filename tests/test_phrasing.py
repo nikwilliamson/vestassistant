@@ -6,10 +6,10 @@ be tested: a Source imports homeassistant.core, and this suite has no HA.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from core.layout import NOTE, fit
-from core.phrasing import clock_text, forecast_text
+from core.phrasing import clock_text, event_text, forecast_text
 
 
 class TestClock:
@@ -96,3 +96,44 @@ class TestForecast:
         assert fit(
             forecast_text(100, "partlycloudy", datetime(2026, 9, 17, 23, 0)), NOTE
         ).fits
+
+
+class TestEventText:
+    NOW = datetime(2026, 9, 18, 12, 0)
+
+    def event(self, start, hours=1, summary="Dentist", **kw):
+        return event_text(
+            summary, start, start + timedelta(hours=hours), self.NOW, **kw
+        )
+
+    def test_today_with_a_time_on_the_hour(self):
+        assert self.event(datetime(2026, 9, 18, 15, 0)) == "TODAY 3 PM|Dentist"
+
+    def test_minutes_only_when_they_matter(self):
+        assert self.event(datetime(2026, 9, 18, 15, 30)) == "TODAY 3:30 PM|Dentist"
+
+    def test_tomorrow(self):
+        assert self.event(datetime(2026, 9, 19, 9, 0)) == "TOMORROW 9 AM|Dentist"
+
+    def test_a_weekday_inside_the_week(self):
+        assert self.event(datetime(2026, 9, 22, 9, 0)) == "TUE 9 AM|Dentist"
+
+    def test_a_date_beyond_the_week(self):
+        assert self.event(datetime(2026, 10, 2, 9, 0)) == "OCT 2 9 AM|Dentist"
+
+    def test_now_while_the_event_is_on(self):
+        assert self.event(datetime(2026, 9, 18, 11, 30)) == "NOW|Dentist"
+
+    def test_all_day_has_no_time(self):
+        assert self.event(datetime(2026, 9, 19), hours=24, all_day=True) == (
+            "TOMORROW|Dentist"
+        )
+
+    def test_an_all_day_event_in_progress_is_still_today_not_now(self):
+        assert self.event(datetime(2026, 9, 18), hours=24, all_day=True) == (
+            "TODAY|Dentist"
+        )
+
+    def test_the_card_fits_a_note_after_shortening(self):
+        text = self.event(datetime(2026, 9, 19, 15, 0), summary="Take the bins out")
+        assert fit(text, NOTE, shorten=True).fits

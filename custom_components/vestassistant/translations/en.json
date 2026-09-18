@@ -95,6 +95,23 @@
             "colour": "Used when an entity does not set a 'colour' attribute of its own."
           }
         },
+        "calendar": {
+          "title": "Events from a calendar",
+          "description": "Upcoming events, one per card: when on the first row, what below it. NOW while an event is on, then TODAY or TOMORROW with the time, the weekday within a week, and the date beyond that. A card leaves the board when its event ends.",
+          "data": {
+            "name": "Name",
+            "entity_id": "Calendar",
+            "lookahead_days": "Days ahead",
+            "max_events": "Events at most",
+            "tier": "Tier",
+            "colour": "Colour"
+          },
+          "data_description": {
+            "lookahead_days": "From the start of today. 1 is today only, 2 is today and tomorrow.",
+            "max_events": "The soonest ones win.",
+            "colour": "The hue of the band down the left edge. Content messages have no band, so a colour on one does nothing."
+          }
+        },
         "pattern": {
           "title": "Colours and patterns",
           "description": "Decorative fills for the board between messages. Each pattern you tick is one card in the content rotation. They drift once an hour, and Sun follows the time of day.",
@@ -196,6 +213,7 @@
         "list": "Messages you type here",
         "todo": "Items from a to-do list",
         "declared": "Messages carried by other entities",
+        "calendar": "Events from a calendar",
         "pattern": "Colours and patterns"
       }
     },

@@ -48,6 +48,8 @@ from .const import (
     CONF_FORECAST_ENTITY,
     CONF_HOST,
     CONF_HUES,
+    CONF_LOOKAHEAD_DAYS,
+    CONF_MAX_EVENTS,
     CONF_PATTERNS,
     CONF_QUIET_END,
     CONF_QUIET_START,
@@ -60,6 +62,8 @@ from .const import (
     DEFAULT_BLEND,
     DEFAULT_CLOCK_REFRESH,
     DEFAULT_DWELL_MINUTES,
+    DEFAULT_LOOKAHEAD_DAYS,
+    DEFAULT_MAX_EVENTS,
     DEFAULT_SUMMARY_TEMPLATE,
     DEFAULT_SUMMARY_THRESHOLD,
     DOMAIN,
@@ -68,6 +72,7 @@ from .const import (
     SERVICE_PIN,
     SERVICE_REMOVE_ITEM,
     SERVICE_VALIDATE,
+    SOURCE_CALENDAR,
     SOURCE_DECLARED,
     SOURCE_LIST,
     SOURCE_PATTERN,
@@ -80,7 +85,12 @@ from .core.models import TIER_CONTENT, SchedulerConfig, TierSet, Trigger, resolv
 from .core.patterns import BLACK, CONTRAST, WHITE
 from .sources.base import ListSource, Source
 from .sources.dynamic import DeclaredSource, ServiceSource, TodoSource
-from .sources.generated import ClockSource, ForecastSource, PatternSource
+from .sources.generated import (
+    CalendarSource,
+    ClockSource,
+    ForecastSource,
+    PatternSource,
+)
 from .transport.base import Transport, VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
@@ -223,6 +233,17 @@ def _source_from_subentry(
             title,
             entity_ids=data.get(CONF_ENTITY_ID) or None,
             default_tier=tier,
+            colour=colour,
+        )
+    if kind == SOURCE_CALENDAR:
+        return CalendarSource(
+            hass,
+            subentry.subentry_id,
+            title,
+            data[CONF_ENTITY_ID],
+            days=int(data.get(CONF_LOOKAHEAD_DAYS, DEFAULT_LOOKAHEAD_DAYS)),
+            max_events=int(data.get(CONF_MAX_EVENTS, DEFAULT_MAX_EVENTS)),
+            tier=tier,
             colour=colour,
         )
     if kind == SOURCE_PATTERN:
