@@ -14,6 +14,7 @@ sys.path.insert(
 from core.layout import (
     FLAGSHIP,
     NOTE,
+    Chrome,
     Geometry,
     fit,
     geometry_from_grid,
@@ -165,3 +166,46 @@ class TestShortening:
         result = fit("HELLO*WORLD", NOTE, shorten=True)
         assert result.error
         assert not result.fits
+
+
+class TestChrome:
+    def test_border_rings_a_flagship(self):
+        result = fit("HI", FLAGSHIP, chrome=Chrome(colour=63, weight="border"))
+        assert all(c == 63 for c in result.grid[0])
+        assert all(c == 63 for c in result.grid[-1])
+        assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
+
+    def test_border_degrades_to_edge_columns_on_a_note(self):
+        result = fit("HI", NOTE, chrome=Chrome(colour=63, weight="border"))
+        assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
+        # The top row is not consumed - a Note has only three.
+        assert not all(c == 63 for c in result.grid[0])
+
+    def test_rule_takes_one_column(self):
+        result = fit("HI", NOTE, chrome=Chrome(colour=64, weight="rule"))
+        assert all(r[0] == 64 for r in result.grid)
+        assert not any(r[-1] == 64 for r in result.grid)
+
+    def test_text_is_inset_and_never_overwrites_the_chrome(self):
+        result = fit("X" * 200, FLAGSHIP, chrome=Chrome(colour=63, weight="border"))
+        assert all(r[0] == 63 and r[-1] == 63 for r in result.grid)
+
+    def test_chrome_reduces_the_room_available(self):
+        # Fifteen characters with no break opportunity: fits one row of a Note
+        # as-is, needs two once a column goes to chrome.
+        token = "ABCDEFGHIJKLMNO"
+        plain = fit(token, NOTE)
+        ruled = fit(token, NOTE, chrome=Chrome(colour=63, weight="rule"))
+        assert ruled.rows_needed > plain.rows_needed
+
+    def test_no_chrome_is_unchanged(self):
+        assert fit("HI", NOTE, chrome=None).grid == fit("HI", NOTE).grid
+
+    def test_chrome_composes_with_shortening(self):
+        result = fit(
+            "TAKE THE BINS OUT TOMORROW",
+            NOTE,
+            chrome=Chrome(colour=63, weight="rule"),
+            shorten=True,
+        )
+        assert all(r[0] == 63 for r in result.grid)

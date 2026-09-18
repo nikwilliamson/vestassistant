@@ -11,6 +11,7 @@ Everything here is pure; no Home Assistant, no I/O.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Final
 
 from vesta.chars import CHARMAP, PRINTABLE, encode
 
@@ -20,6 +21,7 @@ __all__ = [
     "FLAGSHIP",
     "NOTE",
     "PRINTABLE",
+    "Chrome",
     "FitResult",
     "Geometry",
     "blank",
@@ -53,6 +55,37 @@ KNOWN: dict[tuple[int, int], Geometry] = {
     (NOTE.rows, NOTE.cols): NOTE,
     (FLAGSHIP.rows, FLAGSHIP.cols): FLAGSHIP,
 }
+
+
+#: A board needs at least this many rows before a full ring is worth it;
+#: below it, a ring would leave a single usable row.
+RING_MIN_ROWS: Final = 4
+
+
+@dataclass(frozen=True, slots=True)
+class Chrome:
+    """A coloured frame drawn around a card.
+
+    Severity decides how loud it is, so this carries the weight rather than
+    the tier: the layout has no business knowing what 'critical' means.
+    """
+
+    colour: int
+    weight: str
+    """``border`` or ``rule``."""
+
+    def inset(self, geometry: Geometry) -> tuple[int, int, int, int]:
+        """Cells reserved at each edge, as ``(top, right, bottom, left)``.
+
+        A ``rule`` only ever costs the left column. A ``border`` wants a full
+        ring, but on a board shorter than ``RING_MIN_ROWS`` that would leave a
+        single usable row, so it degrades to edge columns only.
+        """
+        if self.weight == "rule":
+            return (0, 0, 0, 1)
+        if geometry.rows >= RING_MIN_ROWS:
+            return (1, 1, 1, 1)
+        return (0, 1, 0, 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,8 +161,53 @@ def fit(
     align: str = "center",
     valign: str = "middle",
     shorten: bool = False,
+    chrome: Chrome | None = None,
 ) -> FitResult:
     """Lay ``text`` out on a board of the given geometry.
+
+    Never raises: overlong input is truncated and reported, and text the
+    board cannot encode comes back with ``error`` set.
+
+    With ``shorten``, the abbreviation ladder is tried before truncation.
+    With ``chrome``, the edges are reserved for a coloured frame and the text
+    is laid out in what remains - which is the one thing a chip string cannot
+    do for itself, because the text sits inside it.
+    """
+    if chrome is None:
+        return _fit_text(text, geometry, align=align, valign=valign, shorten=shorten)
+
+    top, right, bottom, left = chrome.inset(geometry)
+    inner = Geometry(
+        rows=max(1, geometry.rows - top - bottom),
+        cols=max(1, geometry.cols - left - right),
+    )
+    result = _fit_text(text, inner, align=align, valign=valign, shorten=shorten)
+    if result.error:
+        return result
+    return replace(result, grid=_frame(result.grid, geometry, chrome))
+
+
+def _frame(
+    inner: list[list[int]], geometry: Geometry, chrome: Chrome
+) -> list[list[int]]:
+    """Paint the frame and drop the laid-out text into the middle of it."""
+    top, _right, _bottom, left = chrome.inset(geometry)
+    grid = [[chrome.colour] * geometry.cols for _ in range(geometry.rows)]
+    for r, source in enumerate(inner):
+        for c, code in enumerate(source):
+            grid[r + top][c + left] = code
+    return grid
+
+
+def _fit_text(
+    text: str,
+    geometry: Geometry,
+    *,
+    align: str = "center",
+    valign: str = "middle",
+    shorten: bool = False,
+) -> FitResult:
+    """Walk the abbreviation ladder, falling back to truncation.
 
     Never raises: overlong input is truncated and reported, and text the
     board cannot encode comes back with ``error`` set, so a caller can decide
