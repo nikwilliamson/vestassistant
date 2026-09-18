@@ -34,9 +34,11 @@ You will be asked for **Local** or **Cloud**:
   console. Vestaboard drops anything sent within fifteen seconds of the last
   message, so writes are spaced automatically.
 
-**Turn quiet hours off in the Vestaboard app** and set them here instead. The
-cloud enforces its own by silently dropping posts, which would leave the board
-showing something Home Assistant thinks it already replaced.
+**Turn quiet hours off in the Vestaboard app** and set them here instead,
+with `time.*_quiet_hours_start` and `time.*_quiet_hours_end`. The cloud
+enforces its own by silently dropping posts, which would leave the board
+showing something Home Assistant thinks it already replaced. To have no quiet
+hours at all, set both times to the same value.
 
 Note and Flagship are both detected automatically.
 
@@ -62,17 +64,18 @@ see [Entities](#entities). Three things have no sensible entity and live in
 | **Items from a to-do list** | Every incomplete item becomes a message. Tick it off and it leaves the board |
 | **Messages carried by other entities** | For wording that belongs next to whatever raises it. Any entity that is `on` and has a `message` attribute becomes a message while it stays on — no automation needed. See [docs/automations.md](docs/automations.md) |
 
-Each source has a **tier** and an optional **colour**, and every source can be
-edited after the fact — click it under the integration to change the messages,
-the tier or the colour. Automations can also push messages in with
-`vestassistant.add_item`, and you can type one straight to the board with
-`text.*_message`.
+Each source has a **tier** and an optional **colour**.
 
-One message is one boardful. A message that will not fit is shortened, and
+**Sources are editable.** Click one under the integration to change its
+messages, tier or colour — you do not have to delete it and start again.
+
+**One message is one boardful.** A message that will not fit is shortened, and
 failing that truncated; it is never continued onto a second board.
 
-The clock and forecast cards are switches rather than sources — there is only
-ever one of each and nothing to name.
+Automations can push messages in with `vestassistant.add_item`, and you can
+type one straight to the board with `text.*_message`. The clock and forecast
+are switches rather than sources, because there is only ever one of each and
+nothing to name.
 
 ### Tiers
 
@@ -88,10 +91,10 @@ everything else.
 
 ### Colour
 
-Each card carries a coloured band down its left edge: two columns for
+Each message carries a coloured band down its left edge: two columns for
 `critical`, one for `task`, none for `content`. Severity decides whether there
 is a band and how wide; you choose the hue on the source or per item. A
-`content` card with a colour still gets no band, because there is nothing to
+`content` message with a colour still gets no band, because there is nothing to
 tint.
 
 The palette is 63 red, 64 orange, 65 yellow, 66 green, 67 blue, 68 violet.
@@ -109,14 +112,19 @@ Colours are ordinary character codes, so they work inline in any message too:
 
 Rather than cutting a message off, Vestassistant shortens it — `TOMORROW`
 becomes `TMRW`, `AND` becomes `&`, articles go last of all — and truncates
-only when none of that is enough. A typed message list rejects anything that
-will not fit at all, so you find out while you can still reword it.
+only when none of that is enough.
+
+Where a message is checked depends on where it comes from. A typed list checks
+every line as you save it, and the text box checks as you type — both refuse
+anything that will not fit even shortened. A message pushed in by an
+automation cannot refuse an automation, so it is shortened and, failing that,
+truncated. `vestassistant.validate` lets you check one first.
 
 ## Entities
 
 | Entity | |
 | --- | --- |
-| `text.*_message` | Type a message and it goes up now, then the rotation resumes. Clear it to hand the board back early |
+| `text.*_message` | Type a message and it goes up now, then the rotation resumes. Clear it to hand the board back early. Rejects characters the board cannot show as you type, and is capped at your board's capacity — 45 on a Note, 132 on a Flagship |
 | `sensor.*_current_message` | What is on the board, with the queue as an attribute |
 | `sensor.*_needs_attention` | The count behind the summary card |
 | `image.*` | A live picture of the board |
@@ -134,7 +142,7 @@ will not fit at all, so you find out while you can still reword it.
 
 | Service | |
 | --- | --- |
-| `vestassistant.add_item` | Put a card up, with an optional `ttl` and `expire_when` so it removes itself |
+| `vestassistant.add_item` | Put a message up, with an optional `ttl` and `expire_when` so it removes itself |
 | `vestassistant.remove_item` | Take one down |
 | `vestassistant.next` | Advance now |
 | `vestassistant.pin` | Hold one message for a while, then resume |
@@ -177,16 +185,18 @@ writes, but anything else writing to the board will collide with it.
 **The forecast card never appears.** It needs both the switch on *and* a
 weather entity chosen in Settings.
 
-**A card never appears and nothing seems wrong.** It probably contains a
-character the board cannot show. Those cards are skipped rather than written
-over whatever is up, and the log names the character:
+**A message never appears and nothing seems wrong.** It probably contains a
+character the board cannot show. Typed lists and the text box reject those as
+you write them, but one pushed in by an automation is only caught at render
+time — it is skipped rather than written over whatever is up, and the log
+names the character:
 
 ```
 cannot render 'HELLO*WORLD' on a Vestaboard Note: 6: unsupported character: *
 ```
 
-**I set a colour and nothing changed.** Colour picks the hue of a card's band;
-severity decides whether there is one. A `content` card has none.
+**I set a colour and nothing changed.** Colour picks the hue of a message's
+band; severity decides whether there is one. A `content` message has none.
 
 **Quiet hours seem to apply twice.** Turn them off in the Vestaboard app.
 

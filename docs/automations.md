@@ -1,7 +1,11 @@
 # Automation examples
 
-The five services are described in the Developer Tools service picker; this is
-the longer-form version of the ones worth explaining.
+Every service field is described in the Developer Tools service picker. This
+is the longer-form version of the parts worth explaining.
+
+One message is one boardful — there is no way to continue one onto a second
+board. Keep them short, and use `vestassistant.validate` when you are not
+sure.
 
 ## An item that removes itself
 
@@ -38,7 +42,7 @@ actions:
 ```
 
 Severity decides whether there is a band; the colour only decides its hue. A
-`content` card with a colour still gets no band.
+`content` message with a colour still gets no band.
 
 ## Checking a message before you send it
 
@@ -59,13 +63,13 @@ Returns `fits`, `rows_needed`, `rows_available`, `columns`, `board`, `preview`
 `tier` and `colour` are inputs rather than part of the response. Pass a `tier`
 to check the message the way it will actually render, band and all — without
 one it checks the text alone on the bare board, which will tell you something
-fits when a `critical` card would not.
+fits when a `critical` message would not.
 
-## Entities that declare their own card
+## Entities that carry their own message
 
 No automation at all. Any entity that is `on` and carries a `message`
-attribute becomes a card for as long as it stays on, so the wording lives next
-to the thing that raises it:
+attribute becomes a message for as long as it stays on, so the wording lives
+next to the thing that raises it:
 
 ```yaml
 template:
