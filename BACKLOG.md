@@ -14,10 +14,12 @@ what the process already was in practice. See "Releasing" in the README.
 
 Still open:
 
-- **Register the brand with `home-assistant/brands`.** The last HACS check
-  still failing. Assets are in `brand/`. Alternatively HACS accepts them at
-  `custom_components/vestassistant/brand/icon.png`, but the brands repo is the
-  route that also makes the icon show up in Home Assistant itself.
+- **Register the brand with `home-assistant/brands`.** The HACS check is
+  satisfied by the copies now shipped in
+  `custom_components/vestassistant/brand/`, but only the brands repo makes the
+  icon appear in Home Assistant's own UI. That PR wants `icon.png` at 256x256
+  and `icon@2x.png` at 512x512; ours is a single 512x512, so it needs a resize
+  first.
 - **`abort.reconfigure_successful` in `config_subentries.source` is dead.**
   `SourceSubentryFlow` has no reconfigure step, so nothing can emit it. Either
   add the step or drop the string.
