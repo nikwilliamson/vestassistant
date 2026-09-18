@@ -1,4 +1,4 @@
-"""Cloud (Read/Write) API transport.
+"""Cloud API transport.
 
 Works out of the box with a token from the Vestaboard developer console, at
 the cost of a round trip through their cloud and a fifteen-second write
@@ -18,18 +18,18 @@ from typing import Any
 
 import aiohttp
 
-from .base import Transport, VestaboardAuthError, VestaboardError
+from .base import Transport, VestaboardAuthError, VestaboardError, parse_grid
 
 DEFAULT_URL = "https://cloud.vestaboard.com/"
 TIMEOUT = aiohttp.ClientTimeout(total=20)
 
 
 class CloudTransport(Transport):
-    kind = "cloud"
     # "If you send more than 1 message every 15 seconds, you are likely to have
     # messages dropped." One extra second of headroom for clock skew.
     min_write_interval = timedelta(seconds=16)
-    server_side_quiet_hours = True
+    # "Cloud API does not accept blank messages."
+    supports_blank = False
 
     def __init__(
         self,
@@ -50,10 +50,10 @@ class CloudTransport(Transport):
             "Content-Type": "application/json",
         }
 
-    async def _request(self, method: str, url: str, **kw: Any) -> dict:
+    async def _request(self, method: str, **kw: Any) -> dict[str, Any]:
         try:
             async with self._session.request(
-                method, url, headers=self._headers, timeout=TIMEOUT, **kw
+                method, self._base_url, headers=self._headers, timeout=TIMEOUT, **kw
             ) as resp:
                 if resp.status in (401, 403):
                     raise VestaboardAuthError("Vestaboard rejected the API token")
@@ -62,30 +62,20 @@ class CloudTransport(Transport):
                     raise VestaboardError(f"HTTP {resp.status} from Vestaboard: {body}")
                 if resp.content_type != "application/json":
                     return {}
-                return await resp.json()
+                data = await resp.json()
+                return data if isinstance(data, dict) else {}
         except aiohttp.ClientError as err:
             raise VestaboardError(
                 f"could not reach the Vestaboard cloud: {err}"
             ) from err
 
     async def read(self) -> list[list[int]]:
-        data = await self._request("GET", self._base_url)
-        message = data.get("currentMessage") or {}
-        grid = message.get("layout")
-        if isinstance(grid, str):
-            # The cloud has historically returned the layout as a JSON string.
-            import json
-
-            grid = json.loads(grid)
-        if not isinstance(grid, list) or not grid:
-            raise VestaboardError("Vestaboard returned no layout")
+        data = await self._request("GET")
+        layout = (data.get("currentMessage") or {}).get("layout")
+        grid = parse_grid(layout, "the Vestaboard cloud")
         self._note_geometry(grid)
         return grid
 
     async def write(self, characters: list[list[int]]) -> None:
-        await self._request(
-            "POST",
-            self._base_url,
-            json={"characters": characters, "forced": True},
-        )
+        await self._request("POST", json={"characters": characters, "forced": True})
         self._note_geometry(characters)

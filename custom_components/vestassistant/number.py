@@ -15,13 +15,10 @@ from .const import (
     DEFAULT_DWELL_MINUTES,
     DEFAULT_SUMMARY_THRESHOLD,
 )
-from .coordinator import VestassistantConfigEntry
+from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .entity import VestassistantEntity
 
-#: Every read and write goes through the one coordinator, which
-#: serialises them and enforces the board's own spacing, so there is
-#: nothing here for Home Assistant to throttle.
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 
 
 async def async_setup_entry(
@@ -47,7 +44,7 @@ class _OptionNumber(VestassistantEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
 
     _option: str
-    _default: float
+    _default: int
 
     @property
     def native_value(self) -> float:
@@ -67,7 +64,7 @@ class DwellNumber(_OptionNumber):
     _option = CONF_DWELL
     _default = DEFAULT_DWELL_MINUTES
 
-    def __init__(self, coordinator) -> None:
+    def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "dwell")
 
 
@@ -79,7 +76,7 @@ class SummaryThresholdNumber(_OptionNumber):
     _option = CONF_SUMMARY_THRESHOLD
     _default = DEFAULT_SUMMARY_THRESHOLD
 
-    def __init__(self, coordinator) -> None:
+    def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "summary_threshold")
 
 
@@ -96,5 +93,5 @@ class ClockIntervalNumber(_OptionNumber):
     _option = CONF_CLOCK_REFRESH
     _default = DEFAULT_CLOCK_REFRESH
 
-    def __init__(self, coordinator) -> None:
+    def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "clock_interval")

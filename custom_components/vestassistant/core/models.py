@@ -57,7 +57,6 @@ class Trigger(enum.StrEnum):
 
     ITEMS_CHANGED = "items_changed"
     MANUAL = "manual"
-    FOREIGN_WRITE = "foreign_write"
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +175,6 @@ class Item:
     source: str
     text: str
     tier: str = TIER_CONTENT
-    created: datetime | None = None
     expires: datetime | None = None
     dwell: timedelta | None = None
     refresh: timedelta | None = None
@@ -223,15 +221,11 @@ class CursorState:
     current_key: str | None = None
     shown_at: datetime | None = None
     last_rendered: str | None = None
-    last_written_at: datetime | None = None
     attention_key: str | None = None
     content_key: str | None = None
     last_was_attention: bool = False
     known_keys: tuple[str, ...] = ()
     """Keys seen on the previous pass, so arrivals can be told from survivors."""
-
-    frozen: bool = False
-    """Set while quiet hours are holding the board; cleared when they end."""
 
     def with_(self, **changes) -> CursorState:
         return replace(self, **changes)
@@ -261,8 +255,8 @@ class SchedulerConfig:
     dwell: timedelta = timedelta(minutes=20)
     summary_threshold: int = 3
     summary_template: str = "YOU HAVE {n} THINGS THAT NEED YOU."
-    summary_every: int = 1
-    """Show the summary card once every N passes through the attention set."""
+    """``{n}`` is replaced with the count. Any other braces - colour chips
+    like ``{63}`` - pass through to the board untouched."""
 
     quiet_start: time | None = None
     quiet_end: time | None = None
@@ -271,20 +265,24 @@ class SchedulerConfig:
     """Which blend strategy mixes attention and content. See scheduler.BLENDS."""
 
     foreign_write_grace: timedelta = timedelta(minutes=30)
-    """How long to leave the board alone after a human writes to it directly."""
+    """How long to leave the board alone after a human writes to it directly.
 
-
-def resolve_band(item: Item, tiers: TierSet) -> Band | None:
-    """The band for an item, or None when its tier does not draw one.
-
-    Severity sets the width, the item sets the hue. Kept here rather than in
-    layout so that layout stays ignorant of tiers, and here rather than in
-    the scheduler so that it can be tested without a decision.
+    Read by the coordinator, which holds the board the same way a pin does;
+    the scheduler itself never sees a foreign write.
     """
-    tier = tiers.get(item.tier)
+
+
+def resolve_band(tier_name: str, colour: int | None, tiers: TierSet) -> Band | None:
+    """The band for an item of ``tier_name``, or None when its tier draws none.
+
+    Severity sets the width, the item sets the hue. Takes the two values
+    rather than an Item so that authoring paths - the config flow, the
+    validate action - can ask before there is any text to build an Item from.
+    """
+    tier = tiers.get(tier_name)
     if tier.band <= 0:
         return None
-    colour = item.colour if item.colour is not None else tier.colour
-    if colour is None:
+    hue = colour if colour is not None else tier.colour
+    if hue is None:
         return None
-    return Band(colour=colour, width=tier.band)
+    return Band(colour=hue, width=tier.band)

@@ -13,7 +13,7 @@ import abc
 from collections.abc import Callable
 from datetime import datetime
 
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 
 from ..core.models import TIER_CONTENT, Item
 
@@ -39,7 +39,15 @@ class Source(abc.ABC):
         """Register the callback used to tell the coordinator to re-evaluate."""
         self._notify = notify
 
+    @callback
     def _changed(self, *_: object) -> None:
+        """Tell the coordinator to re-evaluate.
+
+        Decorated ``@callback`` so that Home Assistant runs it on the event
+        loop. A plain function handed to a state tracker is classified as an
+        executor job and runs on a worker thread, which is what forced the
+        thread hops this code used to carry.
+        """
         if self._notify is not None:
             self._notify()
 
@@ -70,7 +78,7 @@ class ListSource(Source):
         hass: HomeAssistant,
         source_id: str,
         name: str,
-        entries: list[list[str]],
+        entries: list[str],
         tier: str = TIER_CONTENT,
         colour: int | None = None,
     ) -> None:

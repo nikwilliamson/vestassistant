@@ -17,3 +17,5 @@ known-first-party = ["vestassistant"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The framework-free core is imported directly, without Home Assistant.
+pythonpath = ["custom_components/vestassistant"]

@@ -2,22 +2,30 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
+import logging
+from typing import Any
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.event import (
-    async_track_state_added_domain,
+    TrackStates,
+    TrackTemplate,
+    TrackTemplateResult,
     async_track_state_change_event,
+    async_track_state_change_filtered,
+    async_track_template_result,
 )
 from homeassistant.helpers.template import Template
 
 from ..core.models import TIER_CONTENT, TIER_TASK, Item
 from .base import Source
 
+_LOGGER = logging.getLogger(__name__)
+
 ATTR_MESSAGE = "message"
 ATTR_TIER = "tier"
 ATTR_COLOUR = "colour"
-ATTR_TTL = "ttl"
 
 
 def _as_colour(value: object, default: int | None) -> int | None:
@@ -32,9 +40,9 @@ def _as_colour(value: object, default: int | None) -> int | None:
 class TodoSource(Source):
     """One item per incomplete entry on a to-do list.
 
-    Deliberately reads the entity's own state for the count and its cached
-    items for the text, rather than calling ``todo.get_items`` on every tick -
-    the service call is async and the scheduler runs synchronously.
+    Deliberately reads the list once per change and keeps the result, rather
+    than calling ``todo.get_items`` on every tick - the service call is async
+    and the scheduler runs synchronously.
     """
 
     def __init__(
@@ -60,12 +68,8 @@ class TodoSource(Source):
             )
         )
 
-    def _handle_state(self, event) -> None:
-        """Same thread-safety caveat as the coordinator's notifier."""
-        self.hass.loop.call_soon_threadsafe(self._spawn_refresh)
-
     @callback
-    def _spawn_refresh(self) -> None:
+    def _handle_state(self, _event: Event[EventStateChangedData]) -> None:
         self.hass.async_create_task(self._refresh_and_notify())
 
     async def _refresh_and_notify(self) -> None:
@@ -81,7 +85,8 @@ class TodoSource(Source):
                 blocking=True,
                 return_response=True,
             )
-        except Exception:
+        except Exception:  # the list may not be loaded yet
+            _LOGGER.debug("could not read %s; treating it as empty", self.entity_id)
             self._cache = []
             return
         entries = (response or {}).get(self.entity_id, {}).get("items", [])
@@ -139,22 +144,23 @@ class DeclaredSource(Source):
         self.colour = colour
 
     async def async_setup(self) -> None:
-        if self.entity_ids:
-            self._listeners.append(
-                async_track_state_change_event(
-                    self.hass, self.entity_ids, self._changed
-                )
-            )
-            return
-        # Watching whole domains costs one listener each and means a card
-        # added to a package file shows up without a restart.
-        for domain in self.domains:
-            self._listeners.append(
-                async_track_state_added_domain(self.hass, domain, self._changed)
-            )
-        self._listeners.append(
-            async_track_state_change_event(self.hass, self._candidates(), self._changed)
+        # One filtered listener covers both cases. Watching the domains
+        # rather than a snapshot of matching entities is what lets a card
+        # added to a package file after startup not just appear, but keep
+        # reporting its on/off changes without a reload.
+        watch = (
+            TrackStates(False, set(self.entity_ids), set())
+            if self.entity_ids
+            else TrackStates(False, set(), set(self.domains))
         )
+        tracker = async_track_state_change_filtered(self.hass, watch, self._on_state)
+        self._listeners.append(tracker.async_remove)
+
+    @callback
+    def _on_state(self, event: Event[EventStateChangedData]) -> None:
+        old, new = event.data["old_state"], event.data["new_state"]
+        if any(s is not None and ATTR_MESSAGE in s.attributes for s in (old, new)):
+            self._changed()
 
     def _candidates(self) -> list[str]:
         if self.entity_ids:
@@ -193,21 +199,34 @@ class ServiceSource(Source):
 
     Two guards exist because the removal half of an imperative API is the half
     that gets missed: ``ttl`` ages an item out, and ``expire_when`` is a
-    template the integration evaluates continuously, so removal becomes a
-    state rather than an event somebody has to remember to fire.
+    template the integration tracks, so removal becomes a state rather than
+    an event somebody has to remember to fire.
     """
 
     def __init__(self, hass: HomeAssistant, source_id: str = "service") -> None:
         super().__init__(hass, source_id, "Service")
-        self._items: dict[str, dict] = {}
+        self._items: dict[str, dict[str, Any]] = {}
+        self._templates: dict[str, Template] = {}
+        self._trackers: dict[str, Callable[[], None]] = {}
 
     # -- persistence ------------------------------------------------------
 
-    def as_dict(self) -> dict[str, dict]:
+    def as_dict(self) -> dict[str, dict[str, Any]]:
         return self._items
 
-    def restore(self, data: dict[str, dict] | None) -> None:
+    def restore(self, data: dict[str, dict[str, Any]] | None) -> None:
         self._items = dict(data or {})
+
+    # -- lifecycle --------------------------------------------------------
+
+    async def async_setup(self) -> None:
+        for item_id, raw in self._items.items():
+            self._track(item_id, raw.get("expire_when"))
+
+    async def async_unload(self) -> None:
+        for item_id in list(self._trackers):
+            self._untrack(item_id)
+        await super().async_unload()
 
     # -- mutation ---------------------------------------------------------
 
@@ -229,23 +248,53 @@ class ServiceSource(Source):
             "text": text,
             "tier": tier,
             "colour": colour,
-            "created": now.isoformat(),
             "expires": (now + ttl).isoformat() if ttl else None,
             "expire_when": expire_when,
             "dwell": dwell.total_seconds() if dwell else None,
         }
+        self._track(item_id, expire_when)
         self._changed()
 
     def remove(self, item_id: str) -> bool:
         existed = self._items.pop(item_id, None) is not None
         if existed:
+            self._untrack(item_id)
             self._changed()
         return existed
 
-    def clear(self) -> None:
-        if self._items:
-            self._items.clear()
-            self._changed()
+    # -- expire_when tracking ---------------------------------------------
+
+    def _track(self, item_id: str, expire_when: str | None) -> None:
+        """Watch the item's template so it can leave without a tick from elsewhere."""
+        self._untrack(item_id)
+        if not expire_when:
+            return
+        template = Template(expire_when, self.hass)
+        self._templates[item_id] = template
+        info = async_track_template_result(
+            self.hass, [TrackTemplate(template, None)], self._on_template
+        )
+        self._trackers[item_id] = info.async_remove
+
+    def _untrack(self, item_id: str) -> None:
+        self._templates.pop(item_id, None)
+        if unsub := self._trackers.pop(item_id, None):
+            unsub()
+
+    @callback
+    def _on_template(
+        self, _event: Event | None, _updates: list[TrackTemplateResult]
+    ) -> None:
+        self._changed()
+
+    def _satisfied(self, item_id: str) -> bool:
+        template = self._templates.get(item_id)
+        if template is None:
+            return False
+        try:
+            return bool(template.async_render(parse_result=True))
+        except Exception:  # a broken template keeps the item
+            return False
 
     # -- Source protocol --------------------------------------------------
 
@@ -253,23 +302,22 @@ class ServiceSource(Source):
         out: list[Item] = []
         satisfied: list[str] = []
         for item_id, raw in self._items.items():
-            expire_when = raw.get("expire_when")
-            if expire_when and self._render_bool(expire_when):
+            if self._satisfied(item_id):
                 satisfied.append(item_id)
                 continue
-            expires = raw.get("expires")
+            # Items stored before multi-card was removed kept a list; take
+            # the first rather than failing to restore them at all.
+            text = raw.get("text") or (raw.get("cards") or [""])[0]
+            if not text:
+                continue
             out.append(
                 Item(
                     id=item_id,
                     source=self.source_id,
-                    # Items stored before multi-card was removed kept a
-                    # list; take the first and drop the rest rather than
-                    # failing to restore them at all.
-                    text=raw.get("text") or (raw.get("cards") or [""])[0],
+                    text=text,
                     tier=raw.get("tier", TIER_CONTENT),
                     colour=raw.get("colour"),
-                    created=_parse(raw.get("created")),
-                    expires=_parse(expires),
+                    expires=_parse(raw.get("expires")),
                     dwell=(
                         timedelta(seconds=raw["dwell"]) if raw.get("dwell") else None
                     ),
@@ -278,14 +326,8 @@ class ServiceSource(Source):
             )
         for item_id in satisfied:
             self._items.pop(item_id, None)
+            self._untrack(item_id)
         return out
-
-    def _render_bool(self, template_str: str) -> bool:
-        try:
-            template = Template(template_str, self.hass)
-            return bool(template.async_render(parse_result=True))
-        except Exception:
-            return False
 
 
 def _parse(value: str | None) -> datetime | None:

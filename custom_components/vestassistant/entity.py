@@ -25,5 +25,5 @@ class VestassistantEntity(CoordinatorEntity[VestassistantCoordinator]):
             name=entry.title,
             manufacturer="Vestaboard",
             model=geometry.name if geometry else None,
-            sw_version=getattr(coordinator.transport, "firmware_version", None),
+            sw_version=coordinator.transport.firmware_version,
         )

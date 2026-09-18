@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
@@ -54,16 +56,10 @@ from .const import (
     TRANSPORT_CLOUD,
     TRANSPORT_LOCAL,
 )
-from .core.layout import fit
-from .core.models import (
-    TIER_CONTENT,
-    TIER_CRITICAL,
-    TIER_TASK,
-    Item,
-    TierSet,
-    resolve_band,
-)
-from .transport.base import VestaboardAuthError, VestaboardError
+from .coordinator import VestassistantCoordinator
+from .core.layout import NOTE, Geometry, fit
+from .core.models import TIER_CONTENT, TIER_CRITICAL, TIER_TASK, TierSet, resolve_band
+from .transport.base import Transport, VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
 
@@ -123,21 +119,23 @@ class VestassistantConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             session = async_get_clientsession(self.hass)
+            api_key = user_input.get(CONF_API_KEY)
+            token = user_input.get(CONF_ENABLEMENT_TOKEN)
+            if not api_key and not token:
+                errors["base"] = "missing_credentials"
             try:
-                api_key = user_input.get(CONF_API_KEY)
-                if not api_key:
+                if not errors and not api_key:
                     api_key = await LocalTransport.async_enable(
-                        session,
-                        user_input[CONF_HOST],
-                        user_input[CONF_ENABLEMENT_TOKEN],
+                        session, user_input[CONF_HOST], token
                     )
-                transport = LocalTransport(session, user_input[CONF_HOST], api_key)
-                geometry = await transport.async_detect_geometry()
+                if not errors:
+                    transport = LocalTransport(session, user_input[CONF_HOST], api_key)
+                    geometry = await transport.async_detect_geometry()
             except VestaboardAuthError:
                 errors["base"] = "invalid_auth"
             except VestaboardError:
                 errors["base"] = "cannot_connect"
-            else:
+            if not errors:
                 await self.async_set_unique_id(f"local:{user_input[CONF_HOST]}")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
@@ -193,33 +191,51 @@ class VestassistantConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         entry = self._get_reauth_entry()
+        cloud = entry.data.get(CONF_TRANSPORT) == TRANSPORT_CLOUD
+        key = CONF_TOKEN if cloud else CONF_API_KEY
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_update_reload_and_abort(entry, data_updates=user_input)
-        key = (
-            CONF_TOKEN
-            if entry.data.get(CONF_TRANSPORT) == TRANSPORT_CLOUD
-            else CONF_API_KEY
-        )
+            # Prove the new credential works before it replaces the old one,
+            # exactly as the create path does.
+            session = async_get_clientsession(self.hass)
+            transport: Transport = (
+                CloudTransport(session, user_input[key])
+                if cloud
+                else LocalTransport(session, entry.data[CONF_HOST], user_input[key])
+            )
+            try:
+                await transport.async_detect_geometry()
+            except VestaboardAuthError:
+                errors["base"] = "invalid_auth"
+            except VestaboardError:
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry, data_updates=user_input
+                )
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=vol.Schema({vol.Required(key): str}),
+            errors=errors,
         )
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry) -> OptionsFlow:
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         return VestassistantOptionsFlow()
 
     @classmethod
     @callback
-    def async_get_supported_subentry_types(cls, config_entry) -> dict[str, type]:
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
         return {SUBENTRY_SOURCE: SourceSubentryFlow}
 
 
@@ -388,19 +404,13 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             # version of this feedback loop. The rendered message carries a
             # band, so validation has to reserve the same space or a message
             # can pass here and still get shortened on the wall.
+            # The selector hands back a string ("66"); Band wants an int.
             raw_colour = user_input.get(CONF_COLOUR)
-            band = resolve_band(
-                Item(
-                    id="validate",
-                    source="validate",
-                    text="",
-                    tier=user_input[CONF_TIER],
-                    # The selector hands back a string ("66"); Item and Band
-                    # want an int.
-                    colour=int(raw_colour) if raw_colour is not None else None,
-                ),
-                TierSet(),
-            )
+            colour = int(raw_colour) if raw_colour is not None else None
+            band = resolve_band(user_input[CONF_TIER], colour, self._tiers())
+            # Without shorten: the rendered card may abbreviate, but a message
+            # that only fits abbreviated is worth telling the author about
+            # while they can still reword it.
             results = [fit(line, self._geometry(), band=band) for line in entries]
             if any(r.error for r in results):
                 errors[CONF_ENTRIES] = "invalid_character"
@@ -517,11 +527,20 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             ),
         )
 
-    def _geometry(self):
-        from .core.layout import NOTE
-
+    def _coordinator(self) -> VestassistantCoordinator | None:
         entry = self._get_entry()
-        coordinator = getattr(entry, "runtime_data", None)
+        if entry.state is not ConfigEntryState.LOADED:
+            return None
+        return entry.runtime_data
+
+    def _geometry(self) -> Geometry:
+        coordinator = self._coordinator()
         if coordinator is not None and coordinator.geometry is not None:
             return coordinator.geometry
         return NOTE
+
+    def _tiers(self) -> TierSet:
+        coordinator = self._coordinator()
+        if coordinator is not None:
+            return coordinator.scheduler_config.tiers
+        return TierSet()

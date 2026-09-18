@@ -7,6 +7,7 @@ restarts, rate limits and other people touching the board.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 import enum
 import logging
@@ -19,11 +20,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import (
-    POLL_INTERVAL,
-    STORAGE_KEY,
-    STORAGE_VERSION,
-)
+from .const import POLL_INTERVAL, STORAGE_KEY, STORAGE_VERSION
 from .core.layout import Geometry, blank, decode, fit
 from .core.models import (
     CursorState,
@@ -34,11 +31,15 @@ from .core.models import (
     resolve_band,
 )
 from .core.scheduler import decide
-from .transport.base import Transport, VestaboardAuthError, VestaboardError
+from .sources.base import Source
+from .sources.dynamic import ServiceSource
+from .transport.base import Transport, VestaboardError
 
 _LOGGER = logging.getLogger(__name__)
 
-#: How long to wait before trying again after the board refuses a write.
+#: How long to wait before trying again after the board refuses a write, and
+#: how long after our own write a read-back difference is still the board
+#: catching up rather than somebody else posting.
 WRITE_RETRY = timedelta(seconds=30)
 
 
@@ -57,7 +58,7 @@ class WriteOutcome(enum.StrEnum):
     improve on its own, and retrying it would loop until the item leaves."""
 
 
-VestassistantConfigEntry = ConfigEntry["VestassistantCoordinator"]
+type VestassistantConfigEntry = ConfigEntry[VestassistantCoordinator]
 
 
 class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
@@ -79,11 +80,19 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         )
         self.transport = transport
         self.scheduler_config = config
-        self.sources: list[Any] = []
+        self.sources: list[Source] = []
+        self.service_source: ServiceSource | None = None
         self.geometry: Geometry | None = transport.geometry
 
         self.cursor = CursorState()
         self.decision: Decision | None = None
+        self.queue: list[Item] = []
+        """The items collected on the last tick, for the sensor's attributes.
+
+        Snapshotted rather than re-collected on demand: collecting has side
+        effects (a satisfied ``expire_when`` removes its item) and must not
+        happen from an entity's state-attribute property.
+        """
         self._displayed_decision: Decision | None = None
         """The last decision the board actually shows.
 
@@ -104,17 +113,20 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         """
         self.rotation_enabled = True
         self.paused_until: datetime | None = None
+        """While set, the rotation leaves the board alone: a pin, a typed
+        message, or a human posting from the Vestaboard app."""
         self.typed_message: str = ""
         """The last message typed straight at the board, for the text entity."""
 
-        self._store: Store = Store(
+        self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}"
         )
         self._cancel_wake: CALLBACK_TYPE | None = None
         self._last_written_grid: list[list[int]] | None = None
         self._last_write_at: datetime | None = None
         self._pending_trigger: Trigger | None = None
-        self._service_source: Any | None = None
+        self._tick_lock = asyncio.Lock()
+        self._queued_tick: asyncio.Task[None] | None = None
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -131,8 +143,12 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             # builds a fresh coordinator; without this the spacing guard reset
             # and the next write landed inside the board's flip window.
             self._last_write_at = datetime.fromisoformat(written)
-        if self._service_source is not None:
-            self._service_source.restore(stored.get("service_items"))
+        if paused := stored.get("paused_until"):
+            # Likewise: a settings change mid-pin reloads the entry, and the
+            # pin must outlive that or the START tick overwrites it.
+            self.paused_until = datetime.fromisoformat(paused)
+        if self.service_source is not None:
+            self.service_source.restore(stored.get("service_items"))
 
         if self.geometry is None:
             self.geometry = await self.transport.async_detect_geometry()
@@ -141,13 +157,16 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             source.set_notifier(self._source_changed)
             await source.async_setup()
 
-    def register_source(self, source: Any) -> None:
+    def register_source(self, source: Source) -> None:
         self.sources.append(source)
-        if getattr(source, "source_id", None) == "service":
-            self._service_source = source
+        if isinstance(source, ServiceSource):
+            self.service_source = source
 
     async def async_shutdown(self) -> None:
         self._cancel_timer()
+        if self._queued_tick is not None:
+            self._queued_tick.cancel()
+            self._queued_tick = None
         for source in self.sources:
             await source.async_unload()
         await self._async_save()
@@ -166,8 +185,6 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         """
         try:
             grid = await self.transport.read()
-        except VestaboardAuthError as err:
-            raise UpdateFailed(str(err)) from err
         except VestaboardError as err:
             raise UpdateFailed(str(err)) from err
 
@@ -181,7 +198,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         ):
             _LOGGER.debug("board changed underneath us; yielding")
             self._last_written_grid = grid
-            await self.async_tick(Trigger.FOREIGN_WRITE)
+            await self.async_hold(self.scheduler_config.foreign_write_grace)
 
         return grid
 
@@ -189,46 +206,52 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         """Ignore read-back differences right after our own write."""
         if self._last_write_at is None:
             return False
-        return now - self._last_write_at < timedelta(seconds=30)
+        return now - self._last_write_at < WRITE_RETRY
 
     # ------------------------------------------------------------------
     # the scheduling loop
     # ------------------------------------------------------------------
 
-    def _source_changed(self) -> None:
-        """Ask for a re-evaluation. Safe to call from any thread.
-
-        Sources are driven by state-change listeners, which usually run on the
-        event loop - but not always: a registry write on a worker thread can
-        reach a listener synchronously, and `async_create_task` is not thread
-        safe. Home Assistant detects that and logs a RuntimeError. Hopping
-        through the loop covers both cases, and costs one iteration when
-        already on it.
-        """
-        self.hass.loop.call_soon_threadsafe(self._schedule_tick)
-
     @callback
-    def _schedule_tick(self) -> None:
-        self.hass.async_create_task(self.async_tick(Trigger.ITEMS_CHANGED))
+    def _source_changed(self) -> None:
+        """Ask for a re-evaluation. Coalesces a burst of changes into one tick."""
+        if self._queued_tick is not None:
+            return
+        self._queued_tick = self.hass.async_create_task(self._async_queued_tick())
+
+    async def _async_queued_tick(self) -> None:
+        # Cleared before the tick runs, so a change that lands while this
+        # tick is collecting queues another rather than being lost.
+        self._queued_tick = None
+        await self.async_tick(Trigger.ITEMS_CHANGED)
 
     def collect(self, now: datetime) -> list[Item]:
         items: list[Item] = []
         for source in self.sources:
             try:
                 items.extend(source.items(now))
-            except Exception:
-                _LOGGER.exception("source %s failed", getattr(source, "source_id", "?"))
+            except Exception:  # one bad source must not stop the rest
+                _LOGGER.exception("source %s failed", source.source_id)
         return items
 
     async def async_tick(self, trigger: Trigger = Trigger.DWELL) -> None:
-        """Re-evaluate and, if the answer changed, write to the board."""
+        """Re-evaluate and, if the answer changed, write to the board.
+
+        Serialised: a poll noticing a foreign write, a timer and a source
+        change can all arrive at once, and two ticks interleaving across the
+        write would each act on the same cursor and both flip the board.
+        """
+        async with self._tick_lock:
+            await self._async_tick(trigger)
+
+    async def _async_tick(self, trigger: Trigger) -> None:
         now = dt_util.now()
 
         if self.paused_until:
             if now < self.paused_until:
-                self._schedule_wake(self.paused_until)
+                self._schedule_wake(self.paused_until, Trigger.START)
                 return
-            # The pin has run out. Clear the typed message with it, so the
+            # The hold has run out. Clear the typed message with it, so the
             # text box stops claiming something the board no longer shows.
             self.paused_until = None
             self.typed_message = ""
@@ -238,14 +261,15 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             return
 
         items = self.collect(now)
+        self.queue = items
+        previous = self.cursor
         decision = decide(
             items,
             now=now,
-            state=self.cursor,
+            state=previous,
             config=self.scheduler_config,
             trigger=trigger,
         )
-        previously_rendered = self.cursor.last_rendered
         self.cursor = decision.state
         self.decision = decision
 
@@ -254,16 +278,15 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         if decision.write:
             outcome = await self._async_render(decision, now)
             if outcome in (WriteOutcome.FAILED, WriteOutcome.DEFERRED):
-                # The board did NOT change, so the cursor must not claim it
-                # did. SKIPPED is deliberately excluded: the card is
-                # unrenderable, so leaving last_rendered set is what stops
-                # the scheduler offering it again every retry.
-                self.cursor = self.cursor.with_(last_rendered=previously_rendered)
-                wake = self._retry_at(now, outcome)
-                # A retry is an ordinary tick, not a refresh: re-attempting a
-                # write that failed should not also hold the board for an item
-                # that may be what the board is unhappy about.
-                wake_trigger = Trigger.DWELL
+                # The board did NOT change, so nothing about the cursor may
+                # claim it did. Put the whole pre-decision state back and
+                # replay the same trigger later: decide is deterministic, so
+                # the retry re-picks this card instead of advancing past it.
+                # SKIPPED is deliberately excluded: the card is unrenderable,
+                # and leaving last_rendered set is what stops the scheduler
+                # offering it again every retry.
+                self.cursor = previous
+                wake, wake_trigger = self._retry_at(now, outcome), trigger
             elif outcome is WriteOutcome.WRITTEN:
                 self._displayed_decision = decision
                 self._unrendered_text = None
@@ -306,21 +329,20 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             return WriteOutcome.DEFERRED
 
         if decision.blank:
+            if not self.transport.supports_blank:
+                # The cloud refuses a blank message. Leave the last card up:
+                # a stale card beats a warning every thirty seconds forever.
+                _LOGGER.debug("nothing to show; a %s cannot be blanked", geometry.name)
+                return WriteOutcome.WRITTEN
             grid = blank(geometry)
         else:
+            item = decision.item
             band = (
-                resolve_band(decision.item, self.scheduler_config.tiers)
-                if decision.item is not None
+                resolve_band(item.tier, item.colour, self.scheduler_config.tiers)
+                if item is not None
                 else None
             )
-            result = fit(
-                decision.text or "",
-                geometry,
-                align=self.scheduler_config_align,
-                valign=self.scheduler_config_valign,
-                shorten=True,
-                band=band,
-            )
+            result = fit(decision.text or "", geometry, shorten=True, band=band)
             if result.error:
                 _LOGGER.warning(
                     "cannot render %r on a %s: %s",
@@ -338,25 +360,27 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 )
             grid = result.grid
 
+        if not await self._async_write(grid, now):
+            return WriteOutcome.FAILED
+        return WriteOutcome.WRITTEN
+
+    async def _async_write(self, grid: list[list[int]], now: datetime) -> bool:
+        """The one place a grid goes to the board. True if it landed."""
         try:
             await self.transport.write(grid)
         except VestaboardError as err:
-            _LOGGER.warning(
-                "could not write to the board (will retry): %s", err
-            )
+            _LOGGER.warning("could not write to the board (will retry): %s", err)
             # Treat a refused write as though it had just happened, so the
             # retry still respects the spacing the board wants.
             self._last_write_at = now
-            return WriteOutcome.FAILED
-
+            return False
         self._last_written_grid = grid
         self._last_write_at = now
-        return WriteOutcome.WRITTEN
-
-    # Alignment lives on the entry options; kept as properties so the render
-    # path stays readable.
-    scheduler_config_align: str = "center"
-    scheduler_config_valign: str = "middle"
+        # Hand the grid to the entities now rather than when the next poll
+        # reads it back, so the preview image and board text do not lag the
+        # wall by up to a minute.
+        self.async_set_updated_data(grid)
+        return True
 
     # ------------------------------------------------------------------
     # timers
@@ -400,50 +424,65 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             await self._async_save()
             self.async_update_listeners()
 
-    async def async_pin(self, message: str, duration: timedelta) -> None:
+    async def async_pin(self, message: str, duration: timedelta) -> bool:
         """Take the board now, then hand it back to the rotation.
 
         Nothing about the board or the scheduler changes until the write has
         actually landed: a message that cannot be encoded, or a board that
         refuses the write, must leave the rotation exactly as it was rather
-        than pausing it for ``duration`` while showing nothing.
+        than pausing it for ``duration`` while showing nothing. Returns
+        whether it landed.
         """
         geometry = self.geometry
         if geometry is None:
-            return
-        result = fit(message, geometry, align="center", valign="middle")
+            return False
+        # shorten=True to match what the text entity validated against;
+        # without it a message that fit only by abbreviation gets truncated.
+        result = fit(message, geometry, shorten=True)
         if result.error:
             _LOGGER.error("cannot pin %r: %s", message, result.error)
-            return
-        now = dt_util.now()
-        try:
-            await self.transport.write(result.grid)
-        except VestaboardError as err:
-            _LOGGER.error("could not pin message: %s", err)
-            return
-        self.paused_until = now + duration
-        self._last_written_grid = result.grid
-        self._last_write_at = now
+            return False
+        async with self._tick_lock:
+            now = dt_util.now()
+            if not await self._async_write(result.grid, now):
+                return False
+            self._hold_until(now + duration)
+        return True
+
+    async def async_hold(self, duration: timedelta) -> None:
+        """Leave whatever is on the board alone for ``duration``.
+
+        Used when a person posts from the Vestaboard app: yield to people,
+        not to robots.
+        """
+        async with self._tick_lock:
+            self._hold_until(dt_util.now() + duration)
+
+    def _hold_until(self, when: datetime) -> None:
+        self.paused_until = when
+        # Forget what we last rendered: the board no longer shows it, and
+        # when the hold ends the resumed card must be rewritten even if it
+        # is the same text as before.
         self.cursor = self.cursor.with_(last_rendered=None)
-        self._schedule_wake(self.paused_until, Trigger.START)
+        self._schedule_wake(when, Trigger.START)
         self.async_update_listeners()
 
     async def async_release(self) -> None:
-        """Hand the board back to the rotation before a pin has run out."""
+        """Hand the board back to the rotation before a hold has run out."""
         if self.paused_until is None:
             return
         self.paused_until = None
         await self.async_tick(Trigger.START)
 
     @callback
-    def async_set_option(self, key: str, value) -> None:
+    def async_set_option(self, key: str, value: Any) -> None:
         """Write one option and let the entry reload apply it.
 
         The entry's options are the single source of truth: a value set from
         an entity reads back the same in Settings, and survives a restart,
         which in-memory state did not. Reloading rebuilds the scheduler and
         the source list; the board is undisturbed, because the rotation
-        cursor is persisted.
+        cursor and any hold are persisted.
         """
         entry = self.config_entry
         if entry.options.get(key) == value:
@@ -462,11 +501,14 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 "cursor": _cursor_to_dict(self.cursor),
                 "rotation_enabled": self.rotation_enabled,
                 "typed_message": self.typed_message,
+                "paused_until": (
+                    self.paused_until.isoformat() if self.paused_until else None
+                ),
                 "last_write_at": (
                     self._last_write_at.isoformat() if self._last_write_at else None
                 ),
                 "service_items": (
-                    self._service_source.as_dict() if self._service_source else {}
+                    self.service_source.as_dict() if self.service_source else {}
                 ),
             }
         )
@@ -499,7 +541,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         return decode(self.data) if self.data else ""
 
 
-def _cursor_to_dict(cursor: CursorState) -> dict:
+def _cursor_to_dict(cursor: CursorState) -> dict[str, Any]:
     return {
         "current_key": cursor.current_key,
         "shown_at": cursor.shown_at.isoformat() if cursor.shown_at else None,
@@ -511,7 +553,7 @@ def _cursor_to_dict(cursor: CursorState) -> dict:
     }
 
 
-def _cursor_from_dict(data: dict | None) -> CursorState:
+def _cursor_from_dict(data: dict[str, Any] | None) -> CursorState:
     if not data:
         return CursorState()
     shown = data.get("shown_at")

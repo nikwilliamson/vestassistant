@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import time, timedelta
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigSubentry
 from homeassistant.const import Platform
 from homeassistant.core import (
     HomeAssistant,
@@ -71,18 +71,11 @@ from .const import (
 )
 from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .core.layout import NOTE, Geometry, fit
-from .core.models import (
-    TIER_CONTENT,
-    Item,
-    SchedulerConfig,
-    TierSet,
-    Trigger,
-    resolve_band,
-)
-from .sources.base import ListSource
+from .core.models import TIER_CONTENT, SchedulerConfig, TierSet, Trigger, resolve_band
+from .sources.base import ListSource, Source
 from .sources.dynamic import DeclaredSource, ServiceSource, TodoSource
 from .sources.generated import ClockSource, ForecastSource
-from .transport.base import VestaboardAuthError, VestaboardError
+from .transport.base import Transport, VestaboardAuthError, VestaboardError
 from .transport.cloud import CloudTransport
 from .transport.local import LocalTransport
 
@@ -99,10 +92,7 @@ PLATFORMS: list[Platform] = [
 
 
 def _parse_time(value: str | None) -> time | None:
-    if not value:
-        return None
-    parsed = dt_util.parse_time(value)
-    return parsed
+    return dt_util.parse_time(value) if value else None
 
 
 def _scheduler_config(entry: ConfigEntry) -> SchedulerConfig:
@@ -115,12 +105,11 @@ def _scheduler_config(entry: ConfigEntry) -> SchedulerConfig:
         summary_template=options.get(CONF_SUMMARY_TEMPLATE, DEFAULT_SUMMARY_TEMPLATE),
         quiet_start=_parse_time(options.get(CONF_QUIET_START)),
         quiet_end=_parse_time(options.get(CONF_QUIET_END)),
-        tiers=TierSet(),
         blend=options.get(CONF_BLEND, DEFAULT_BLEND),
     )
 
 
-def _build_transport(hass: HomeAssistant, entry: ConfigEntry):
+def _build_transport(hass: HomeAssistant, entry: ConfigEntry) -> Transport:
     session = async_get_clientsession(hass)
     if entry.data.get(CONF_TRANSPORT) == TRANSPORT_CLOUD:
         return CloudTransport(session, entry.data[CONF_TOKEN])
@@ -163,13 +152,18 @@ async def async_setup_entry(
 
     try:
         await coordinator.async_prepare()
+        await coordinator.async_config_entry_first_refresh()
     except VestaboardAuthError as err:
         raise ConfigEntryAuthFailed(str(err)) from err
     except VestaboardError as err:
         raise ConfigEntryNotReady(str(err)) from err
+    except Exception:
+        # async_prepare subscribed the sources; a failed first refresh must
+        # not leak those listeners into the retry.
+        await coordinator.async_shutdown()
+        raise
 
     entry.runtime_data = coordinator
-    await coordinator.async_config_entry_first_refresh()
     await coordinator.async_tick(Trigger.START)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -177,14 +171,14 @@ async def async_setup_entry(
     return True
 
 
-def _generated_sources(hass: HomeAssistant, entry: ConfigEntry) -> list:
+def _generated_sources(hass: HomeAssistant, entry: ConfigEntry) -> list[Source]:
     """The clock and forecast cards, if their switches are on.
 
     Built from options rather than subentries so that turning one off leaves
     its settings behind, ready for when it goes back on.
     """
     options = entry.options
-    out: list = []
+    out: list[Source] = []
     if options.get(CONF_CLOCK):
         minutes = options.get(CONF_CLOCK_REFRESH, DEFAULT_CLOCK_REFRESH)
         out.append(ClockSource(hass, refresh=timedelta(minutes=int(minutes))))
@@ -192,11 +186,13 @@ def _generated_sources(hass: HomeAssistant, entry: ConfigEntry) -> list:
     # weather entity, and guessing one would put somebody else's city on the
     # wall.
     if options.get(CONF_FORECAST) and (entity := options.get(CONF_FORECAST_ENTITY)):
-        out.append(ForecastSource(hass, entity_id=entity))
+        out.append(ForecastSource(hass, entity))
     return out
 
 
-def _source_from_subentry(hass: HomeAssistant, subentry) -> object | None:
+def _source_from_subentry(
+    hass: HomeAssistant, subentry: ConfigSubentry
+) -> Source | None:
     data = subentry.data
     kind = data.get(CONF_SOURCE_TYPE)
     title = subentry.title or kind or "source"
@@ -248,9 +244,7 @@ ADD_ITEM_SCHEMA = vol.Schema(
         vol.Required(ATTR_ITEM_ID): cv.string,
         vol.Required(ATTR_MESSAGE): cv.string,
         vol.Optional(ATTR_TIER, default=TIER_CONTENT): cv.string,
-        vol.Optional(ATTR_COLOUR): vol.All(
-            vol.Coerce(int), vol.Range(min=63, max=68)
-        ),
+        vol.Optional(ATTR_COLOUR): vol.All(vol.Coerce(int), vol.Range(min=63, max=68)),
         vol.Optional(ATTR_TTL): cv.time_period,
         vol.Optional(ATTR_EXPIRE_WHEN): cv.template,
         vol.Optional("entry_id"): cv.string,
@@ -275,9 +269,7 @@ VALIDATE_SCHEMA = vol.Schema(
         vol.Optional("rows"): cv.positive_int,
         vol.Optional("columns"): cv.positive_int,
         vol.Optional(ATTR_TIER): cv.string,
-        vol.Optional(ATTR_COLOUR): vol.All(
-            vol.Coerce(int), vol.Range(min=63, max=68)
-        ),
+        vol.Optional(ATTR_COLOUR): vol.All(vol.Coerce(int), vol.Range(min=63, max=68)),
         vol.Optional("entry_id"): cv.string,
     }
 )
@@ -287,13 +279,12 @@ def _coordinators(
     hass: HomeAssistant, call: ServiceCall, *, required: bool = True
 ) -> list[VestassistantCoordinator]:
     entry_id = call.data.get("entry_id")
-    out = []
+    out: list[VestassistantCoordinator] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         if entry_id and entry.entry_id != entry_id:
             continue
-        coordinator = getattr(entry, "runtime_data", None)
-        if coordinator is not None:
-            out.append(coordinator)
+        if entry.state is ConfigEntryState.LOADED:
+            out.append(entry.runtime_data)
     if not out and required:
         # Reachable now that the actions exist before any entry does. Saying
         # so beats doing nothing and reporting success.
@@ -305,11 +296,13 @@ def _coordinators(
 
 def _async_register_services(hass: HomeAssistant) -> None:
 
+    # add and remove notify the coordinator themselves, the same way every
+    # other source does, so the handlers do not tick a second time.
+
     async def _add_item(call: ServiceCall) -> None:
         expire = call.data.get(ATTR_EXPIRE_WHEN)
         for coordinator in _coordinators(hass, call):
-            source = coordinator._service_source
-            if source is None:
+            if (source := coordinator.service_source) is None:
                 continue
             source.add(
                 call.data[ATTR_ITEM_ID],
@@ -320,13 +313,11 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 expire_when=expire.template if expire else None,
                 colour=call.data.get(ATTR_COLOUR),
             )
-            await coordinator.async_tick(Trigger.ITEMS_CHANGED)
 
     async def _remove_item(call: ServiceCall) -> None:
         for coordinator in _coordinators(hass, call):
-            source = coordinator._service_source
-            if source is not None and source.remove(call.data[ATTR_ITEM_ID]):
-                await coordinator.async_tick(Trigger.ITEMS_CHANGED)
+            if (source := coordinator.service_source) is not None:
+                source.remove(call.data[ATTR_ITEM_ID])
 
     async def _next(call: ServiceCall) -> None:
         for coordinator in _coordinators(hass, call):
@@ -357,16 +348,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             tiers = (
                 coordinators[0].scheduler_config.tiers if coordinators else TierSet()
             )
-            band = resolve_band(
-                Item(
-                    id="validate",
-                    source="validate",
-                    text="",
-                    tier=call.data[ATTR_TIER],
-                    colour=call.data.get(ATTR_COLOUR),
-                ),
-                tiers,
-            )
+            band = resolve_band(call.data[ATTR_TIER], call.data.get(ATTR_COLOUR), tiers)
         result = fit(call.data[ATTR_MESSAGE], geometry, shorten=True, band=band)
         return {
             "fits": result.fits,

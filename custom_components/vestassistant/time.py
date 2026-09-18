@@ -11,13 +11,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_QUIET_END, CONF_QUIET_START
-from .coordinator import VestassistantConfigEntry
+from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .entity import VestassistantEntity
 
-#: Every read and write goes through the one coordinator, which
-#: serialises them and enforces the board's own spacing, so there is
-#: nothing here for Home Assistant to throttle.
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 
 
 async def async_setup_entry(
@@ -27,8 +24,10 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     async_add_entities(
-        [QuietHoursTime(coordinator, "quiet_start", CONF_QUIET_START),
-         QuietHoursTime(coordinator, "quiet_end", CONF_QUIET_END)]
+        [
+            QuietHoursTime(coordinator, "quiet_start", CONF_QUIET_START),
+            QuietHoursTime(coordinator, "quiet_end", CONF_QUIET_END),
+        ]
     )
 
 
@@ -42,7 +41,9 @@ class QuietHoursTime(VestassistantEntity, TimeEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, coordinator, key: str, option: str) -> None:
+    def __init__(
+        self, coordinator: VestassistantCoordinator, key: str, option: str
+    ) -> None:
         super().__init__(coordinator, key)
         self._option = option
 

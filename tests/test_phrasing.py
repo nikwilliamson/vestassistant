@@ -7,14 +7,6 @@ be tested: a Source imports homeassistant.core, and this suite has no HA.
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
-import sys
-
-# Import the framework-free core directly: it must never need Home Assistant.
-sys.path.insert(
-    0,
-    str(Path(__file__).resolve().parents[1] / "custom_components" / "vestassistant"),
-)
 
 from core.layout import NOTE, fit
 from core.phrasing import clock_text, forecast_text

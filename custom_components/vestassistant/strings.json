@@ -27,7 +27,8 @@
     },
     "error": {
       "cannot_connect": "Could not reach the board.",
-      "invalid_auth": "The board rejected those credentials."
+      "invalid_auth": "The board rejected those credentials.",
+      "missing_credentials": "Enter an enablement token or a local API key."
     },
     "abort": {
       "already_configured": "This board is already set up."

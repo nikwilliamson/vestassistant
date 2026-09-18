@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import VestassistantConfigEntry
+from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .entity import VestassistantEntity
 
-#: Every read and write goes through the one coordinator, which
-#: serialises them and enforces the board's own spacing, so there is
-#: nothing here for Home Assistant to throttle.
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 
 
 async def async_setup_entry(
@@ -29,7 +28,11 @@ async def async_setup_entry(
 class CurrentItemSensor(VestassistantEntity, SensorEntity):
     """The message currently on the board."""
 
-    def __init__(self, coordinator) -> None:
+    # The queue is every message text on every state change; the recorder
+    # does not need a copy of it each time the board flips.
+    _unrecorded_attributes = frozenset({"queue"})
+
+    def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "current_item")
 
     @property
@@ -42,7 +45,7 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
         return text[:255]
 
     @property
-    def extra_state_attributes(self) -> dict:
+    def extra_state_attributes(self) -> dict[str, Any]:
         # The displayed decision, not the raw scheduler decision, for card
         # identity: a card the board could not render (WriteOutcome.SKIPPED)
         # must not be named here either, or the state and its attributes
@@ -55,9 +58,7 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
         item = displayed.item if displayed else None
         queue = [
             {"id": i.id, "source": i.source, "tier": i.tier, "text": i.text}
-            for i in self.coordinator.collect(
-                self.coordinator.cursor.shown_at or dt_now()
-            )
+            for i in self.coordinator.queue
         ]
         return {
             "source": item.meta.get("source_name") if item else None,
@@ -71,18 +72,12 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
         }
 
 
-def dt_now():
-    from homeassistant.util import dt as dt_util
-
-    return dt_util.now()
-
-
 class AttentionCountSensor(VestassistantEntity, SensorEntity):
     """How many items currently need attention - drives the summary card."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator) -> None:
+    def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "attention_count")
 
     @property

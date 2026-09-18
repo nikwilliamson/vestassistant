@@ -8,15 +8,16 @@ the character table.
 from __future__ import annotations
 
 from homeassistant.components.image import ImageEntity
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .coordinator import VestassistantConfigEntry
+from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .core.layout import PRINTABLE
 from .entity import VestassistantEntity
 
-# Vestaboard colour codes 63-69.
+# Vestaboard colour codes 63-71. 69/70 read as white/black on a black board;
+# 71 is 'filled', which the board renders as its own colour.
 SWATCH = {
     63: "#da2f2b",
     64: "#e6791f",
@@ -29,11 +30,7 @@ SWATCH = {
     71: "#101010",
 }
 
-
-#: Every read and write goes through the one coordinator, which
-#: serialises them and enforces the board's own spacing, so there is
-#: nothing here for Home Assistant to throttle.
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 
 
 async def async_setup_entry(
@@ -48,11 +45,14 @@ class BoardImage(VestassistantEntity, ImageEntity):
     _attr_content_type = "image/svg+xml"
     _attr_name = None
 
-    def __init__(self, hass: HomeAssistant, coordinator) -> None:
+    def __init__(
+        self, hass: HomeAssistant, coordinator: VestassistantCoordinator
+    ) -> None:
         VestassistantEntity.__init__(self, coordinator, "board")
         ImageEntity.__init__(self, hass)
         self._attr_image_last_updated = dt_util.utcnow()
 
+    @callback
     def _handle_coordinator_update(self) -> None:
         self._attr_image_last_updated = dt_util.utcnow()
         self._cached_image = None

@@ -22,8 +22,6 @@ CONF_SUMMARY_TEMPLATE: Final = "summary_template"
 CONF_QUIET_START: Final = "quiet_start"
 CONF_QUIET_END: Final = "quiet_end"
 CONF_BLEND: Final = "blend"
-CONF_ALIGN: Final = "align"
-CONF_VALIGN: Final = "valign"
 
 CONF_CLOCK: Final = "clock_enabled"
 CONF_CLOCK_REFRESH: Final = "clock_refresh_minutes"

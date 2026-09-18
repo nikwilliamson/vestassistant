@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import VestassistantConfigEntry
+from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .core.layout import fit
 from .entity import VestassistantEntity
 
@@ -23,11 +23,7 @@ HA_MAX = 255
 #: out is still what decides whether it actually fits.
 PATTERN = r"""[ A-Za-z!"#$%&'()+,\-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ°{}]*"""
 
-
-#: Every read and write goes through the one coordinator, which
-#: serialises them and enforces the board's own spacing, so there is
-#: nothing here for Home Assistant to throttle.
-PARALLEL_UPDATES = 0
+PARALLEL_UPDATES = 0  # every write is serialised by the coordinator
 
 
 async def async_setup_entry(
@@ -50,7 +46,7 @@ class MessageText(VestassistantEntity, TextEntity):
     _attr_native_min = 0
     _attr_pattern = PATTERN
 
-    def __init__(self, coordinator) -> None:
+    def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "message")
         geometry = coordinator.geometry
         # A Note holds 45 cells and a Flagship 132, so the ceiling follows the
@@ -84,7 +80,11 @@ class MessageText(VestassistantEntity, TextEntity):
                     f"{geometry.rows}."
                 )
 
-        self.coordinator.typed_message = message
-        await self.coordinator.async_pin(
+        landed = await self.coordinator.async_pin(
             message, self.coordinator.scheduler_config.dwell
         )
+        if not landed:
+            raise ServiceValidationError(
+                "The board did not take the message. Check the log for why."
+            )
+        self.coordinator.typed_message = message

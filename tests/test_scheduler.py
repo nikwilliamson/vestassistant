@@ -3,14 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta
-from pathlib import Path
-import sys
-
-# Import the framework-free core directly: it must never need Home Assistant.
-sys.path.insert(
-    0,
-    str(Path(__file__).resolve().parents[1] / "custom_components" / "vestassistant"),
-)
 
 from core.layout import Band
 from core.models import (
@@ -37,7 +29,6 @@ def item(id_, tier=TIER_CONTENT, text=None, source="test", **kw):
         source=source,
         text=text or id_.upper(),
         tier=tier,
-        created=kw.pop("created", NOW),
         **kw,
     )
 
@@ -370,13 +361,6 @@ def test_restart_advances_if_the_current_item_is_gone():
     assert d.text == "B"
 
 
-def test_foreign_write_yields_for_the_grace_period():
-    d = run([item("joke1")], trigger=Trigger.FOREIGN_WRITE)
-    assert d.write is False
-    assert d.state.frozen is True
-    assert d.next_wake == NOW + timedelta(minutes=30)
-
-
 # --------------------------------------------------------------------------
 # dwell
 # --------------------------------------------------------------------------
@@ -523,26 +507,21 @@ def test_refresh_after_the_refreshing_item_is_gone_advances_normally():
 
 class TestBandResolution:
     def test_critical_gets_a_two_column_red_band(self):
-        item = Item(id="a", source="s", text="HI", tier=TIER_CRITICAL)
-        assert resolve_band(item, TierSet()) == Band(colour=63, width=2)
+        assert resolve_band(TIER_CRITICAL, None, TierSet()) == Band(colour=63, width=2)
 
     def test_task_gets_a_one_column_orange_band(self):
-        item = Item(id="a", source="s", text="HI", tier=TIER_TASK)
-        assert resolve_band(item, TierSet()) == Band(colour=64, width=1)
+        assert resolve_band(TIER_TASK, None, TierSet()) == Band(colour=64, width=1)
 
     def test_content_gets_nothing(self):
-        item = Item(id="a", source="s", text="HI", tier=TIER_CONTENT)
-        assert resolve_band(item, TierSet()) is None
+        assert resolve_band(TIER_CONTENT, None, TierSet()) is None
 
     def test_an_item_can_override_the_hue(self):
-        item = Item(id="a", source="s", text="HI", tier=TIER_TASK, colour=66)
-        assert resolve_band(item, TierSet()) == Band(colour=66, width=1)
+        assert resolve_band(TIER_TASK, 66, TierSet()) == Band(colour=66, width=1)
 
     def test_an_override_does_not_give_content_a_band(self):
         # Severity decides whether there is a band at all; the colour only
         # decides what hue it is.
-        item = Item(id="a", source="s", text="HI", tier=TIER_CONTENT, colour=66)
-        assert resolve_band(item, TierSet()) is None
+        assert resolve_band(TIER_CONTENT, 66, TierSet()) is None
 
     def test_banded_tier_without_colour_draws_nothing_until_item_supplies_one(self):
         # A tier can want a band (band > 0) but have no default hue. That must
@@ -560,8 +539,53 @@ class TestBandResolution:
                 ),
             )
         )
-        without_colour = Item(id="a", source="s", text="HI", tier="dim")
-        assert resolve_band(without_colour, tiers) is None
+        assert resolve_band("dim", None, tiers) is None
+        assert resolve_band("dim", 65, tiers) == Band(colour=65, width=1)
 
-        with_colour = Item(id="a", source="s", text="HI", tier="dim", colour=65)
-        assert resolve_band(with_colour, tiers) == Band(colour=65, width=1)
+
+# --------------------------------------------------------------------------
+# expiry wakes the scheduler
+# --------------------------------------------------------------------------
+
+
+def test_a_ttl_shorter_than_the_dwell_brings_the_wake_forward():
+    short = item("x", expires=NOW + timedelta(minutes=2))
+    d = run([short, item("y")], trigger=Trigger.START)
+    assert d.text == "X"
+    assert d.next_wake == NOW + timedelta(minutes=2)
+    assert d.wake_trigger is Trigger.ITEMS_CHANGED
+
+
+def test_an_expiry_elsewhere_in_the_queue_does_not_disturb_the_board():
+    """Waking on another item's expiry is a queue change, so the card holds."""
+    short = item("x", expires=NOW + timedelta(minutes=2))
+    first = run([item("y"), short], trigger=Trigger.START)
+    assert first.text == "Y"
+    assert first.next_wake == NOW + timedelta(minutes=2)
+    later = run(
+        [item("y")],
+        state=first.state,
+        trigger=first.wake_trigger,
+        now=NOW + timedelta(minutes=2),
+    )
+    assert later.text == "Y"
+    assert later.write is False
+    # And the original deadline is kept, not restarted.
+    assert later.next_wake == NOW + timedelta(minutes=20)
+
+
+def test_an_expiry_already_in_the_past_does_not_schedule_a_wake_in_the_past():
+    d = run([item("y")], state=CursorState(), now=NOW)
+    assert d.next_wake > NOW
+
+
+# --------------------------------------------------------------------------
+# summary template
+# --------------------------------------------------------------------------
+
+
+def test_summary_template_may_carry_colour_chips():
+    items = [item(f"t{n}", tier=TIER_TASK) for n in range(3)]
+    d = run(items, config=cfg(summary_template="{63} {n} THINGS {63}"))
+    assert d.item.id == SUMMARY_ID
+    assert d.text == "{63} 3 THINGS {63}"

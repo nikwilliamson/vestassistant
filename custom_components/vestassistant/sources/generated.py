@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -78,9 +78,10 @@ class ForecastSource(Source):
     def __init__(
         self,
         hass: HomeAssistant,
+        entity_id: str,
+        *,
         source_id: str = "forecast",
         name: str = "Forecast",
-        entity_id: str = "",
         tier: str = TIER_CONTENT,
     ) -> None:
         super().__init__(hass, source_id, name)
@@ -101,9 +102,9 @@ class ForecastSource(Source):
             async_track_time_interval(self.hass, self._handle_interval, FORECAST_POLL)
         )
 
-    def _handle_state(self, event) -> None:
-        """Same thread-safety caveat as the coordinator's notifier."""
-        self.hass.loop.call_soon_threadsafe(self._spawn_refresh)
+    @callback
+    def _handle_state(self, _event: Event[EventStateChangedData]) -> None:
+        self._spawn_refresh()
 
     @callback
     def _handle_interval(self, _now: datetime) -> None:
@@ -131,7 +132,7 @@ class ForecastSource(Source):
                 blocking=True,
                 return_response=True,
             )
-        except Exception:
+        except Exception:  # the weather integration may be down
             # Leave the previous reading in place rather than blanking the
             # card: a stale forecast is better than no forecast, and the
             # entity is about to tell us when it recovers.

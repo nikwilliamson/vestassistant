@@ -1,7 +1,7 @@
 """Transport abstraction.
 
 Two ways to reach a Vestaboard, with different capabilities. Everything above
-this layer reads the capability properties rather than asking which transport
+this layer reads the capability attributes rather than asking which transport
 it is, so the scheduler never has to know what a cloud is.
 
 vesta's own clients are synchronous, so these are hand-rolled over aiohttp
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import abc
 from datetime import timedelta
+import json
 
 from ..core.layout import Geometry, geometry_from_grid
 
@@ -33,12 +34,14 @@ class Transport(abc.ABC):
     #: care. The coordinator enforces whatever this says.
     min_write_interval: timedelta = timedelta(0)
 
-    #: Whether the far end applies its own quiet hours. Where it does, we send
-    #: everything forced and apply the policy ourselves, so that the board
-    #: state always matches what Vestassistant believes it to be.
-    server_side_quiet_hours: bool = False
+    #: Whether an all-blank grid can be written. The cloud refuses one
+    #: outright, so where this is False the coordinator leaves the last card
+    #: standing instead of trying to clear the board.
+    supports_blank: bool = True
 
-    kind: str = "unknown"
+    #: Reported by the board where it says. The local API sends a Server
+    #: header; the cloud says nothing.
+    firmware_version: str | None = None
 
     def __init__(self) -> None:
         self._geometry: Geometry | None = None
@@ -69,3 +72,19 @@ class Transport(abc.ABC):
     def _note_geometry(self, grid: list[list[int]]) -> None:
         if grid and self._geometry is None:
             self._geometry = geometry_from_grid(grid)
+
+
+def parse_grid(value: object, what: str) -> list[list[int]]:
+    """Coerce whatever an API handed back into a grid, or raise.
+
+    Both APIs have at times returned the layout as a JSON string rather than
+    an array, so a string is decoded before the shape check.
+    """
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError as err:
+            raise VestaboardError(f"{what} returned an unreadable layout") from err
+    if not isinstance(value, list) or not value:
+        raise VestaboardError(f"{what} returned no layout")
+    return value

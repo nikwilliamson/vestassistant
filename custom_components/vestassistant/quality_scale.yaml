@@ -39,7 +39,7 @@ rules:
   integration-owner: done
   log-when-unavailable: done
   parallel-updates: done
-  reauthentication-flow: done
+  reauthentication-flow: done  # validates the new credential before saving
   test-coverage: todo  # core/ is covered; the Home Assistant-facing layer is not
 
   # gold

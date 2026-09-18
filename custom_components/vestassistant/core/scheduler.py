@@ -23,6 +23,7 @@ from .models import (
     QuietHours,
     SchedulerConfig,
     TierPolicy,
+    TierSet,
     Trigger,
 )
 
@@ -56,11 +57,11 @@ def in_quiet_hours(now: datetime, start: time | None, end: time | None) -> bool:
 # --------------------------------------------------------------------------
 
 
-def _rank_of(item: Item, tiers) -> int:
+def _rank_of(item: Item, tiers: TierSet) -> int:
     return -tiers.get(item.tier).rank
 
 
-def _order(items: Iterable[Item], tiers) -> list[Item]:
+def _order(items: Iterable[Item], tiers: TierSet) -> list[Item]:
     """Rank descending, and otherwise leave the caller's order alone.
 
     Python's sort is stable, so a ListSource's rotation order is the order the
@@ -170,16 +171,10 @@ def decide(
         1 for i in live if tiers.get(i.tier).attention and not _drops(i)
     )
 
-    # 4. A human writing to the board directly outranks the rotation. Yield to
-    #    people, not to robots.
-    if trigger is Trigger.FOREIGN_WRITE:
-        return Decision(
-            state=state.with_(frozen=True, shown_at=now, current_key=None),
-            write=False,
-            next_wake=now + config.foreign_write_grace,
-            attention_count=attention_count,
-            reason="yielding to a message posted outside Vestassistant",
-        )
+    # 4. The soonest anything currently live ages out. Whatever is decided
+    #    below, the scheduler must be woken by then: an item with a short
+    #    TTL under a long dwell would otherwise outstay it by the difference.
+    expiry = min((i.expires for i in live if i.expires is not None), default=None)
 
     # 5. Nothing to show.
     if not eligible:
@@ -187,16 +182,14 @@ def decide(
             # Something is pending but the window says not now. Hold the board
             # exactly as it is rather than flapping it blank at 10pm.
             return Decision(
-                state=state.with_(frozen=True),
+                state=state,
                 write=False,
                 next_wake=_next_quiet_boundary(now, config),
                 attention_count=attention_count,
                 reason="quiet hours; holding",
             )
         return Decision(
-            state=CursorState(
-                last_rendered=None, last_written_at=state.last_written_at
-            ),
+            state=CursorState(),
             blank=True,
             write=state.last_rendered is not None,
             next_wake=None,
@@ -214,7 +207,7 @@ def decide(
     arrived = [i for i in ordered if i.key not in known]
 
     chosen: Item | None = None
-    new_state = state.with_(frozen=False)
+    new_state = state
     reason = ""
 
     # 6. A self-refreshing item rewriting itself in place. Holding is the
@@ -230,6 +223,7 @@ def decide(
             attention_count=attention_count,
             reason="refreshed the current item",
             hold=True,
+            expiry=expiry,
         )
 
     # 7. Preemption. An arriving item takes the board if it ranks at least as
@@ -251,21 +245,22 @@ def decide(
             # rotation must not silently extend what is already up.
             return _render(
                 current,
-                    new_state.with_(known_keys=tuple(by_key)),
+                new_state.with_(known_keys=tuple(by_key)),
                 now=now,
                 config=config,
                 tiers=tiers,
                 attention_count=attention_count,
                 reason="queue changed; holding the current item",
                 hold=True,
+                expiry=expiry,
             )
 
-    # 9. Coming back from a restart, resume rather than jump.
+    # 8. Coming back from a restart, resume rather than jump.
     if chosen is None and trigger is Trigger.START and current is not None:
         chosen = current
         reason = "resumed after restart"
 
-    # 10. Otherwise advance through the blend.
+    # 9. Otherwise advance through the blend.
     if chosen is None:
         blend = BLENDS.get(config.blend, _blend_alternate)
         take_attention = blend(attention, content, state)
@@ -289,13 +284,13 @@ def decide(
                         current_key=SUMMARY_KEY,
                         last_was_attention=True,
                         known_keys=tuple(by_key),
-                        frozen=False,
                     ),
                     now=now,
                     config=config,
                     tiers=tiers,
                     attention_count=attention_count,
                     reason="summary card",
+                    expiry=expiry,
                 )
             chosen = by_key[next_key]
             new_state = new_state.with_(attention_key=next_key, last_was_attention=True)
@@ -319,6 +314,7 @@ def decide(
         tiers=tiers,
         attention_count=attention_count,
         reason=reason,
+        expiry=expiry,
     )
 
 
@@ -328,10 +324,11 @@ def _render(
     *,
     now: datetime,
     config: SchedulerConfig,
-    tiers,
+    tiers: TierSet,
     attention_count: int,
     reason: str,
     hold: bool = False,
+    expiry: datetime | None = None,
 ) -> Decision:
     text = item.text
     tier: TierPolicy = tiers.get(item.tier)
@@ -345,13 +342,17 @@ def _render(
     wake, wake_trigger = deadline, Trigger.DWELL
     if item.refresh is not None and now + item.refresh < deadline:
         wake, wake_trigger = now + item.refresh, Trigger.REFRESH
+    # Something aging out is a queue change, not a dwell expiring: if it is
+    # not the item on the board, the board holds; if it is, the cursor no
+    # longer resolves and the rotation advances.
+    if expiry is not None and now < expiry < wake:
+        wake, wake_trigger = expiry, Trigger.ITEMS_CHANGED
 
     return Decision(
         state=state.with_(
             current_key=item.key,
             shown_at=state.shown_at if hold else now,
             last_rendered=text,
-            last_written_at=state.last_written_at if unchanged else now,
         ),
         item=item,
         text=text,
@@ -365,13 +366,15 @@ def _render(
     )
 
 
-def _summary_item(count: int, config: SchedulerConfig, tiers) -> Item:
+def _summary_item(count: int, config: SchedulerConfig, tiers: TierSet) -> Item:
     top = max(
         (t for t in tiers if t.attention),
         key=lambda t: t.rank,
         default=tiers.lowest,
     )
-    text = config.summary_template.format(n=count)
+    # str.replace rather than str.format: the template may carry colour
+    # chips like {63}, which format() would read as a positional index.
+    text = config.summary_template.replace("{n}", str(count))
     return Item(
         id=SUMMARY_ID,
         source=SUMMARY_SOURCE,
