@@ -370,13 +370,16 @@ class SourceSubentryFlow(ConfigSubentryFlow):
             # chrome, so validation has to reserve the same space or a
             # message can validate here and still get truncated on the wall.
             geometry = self._geometry()
+            raw_colour = user_input.get(CONF_COLOUR)
             chrome = resolve_chrome(
                 Item(
                     id="validate",
                     source="validate",
                     cards=("",),
                     tier=user_input[CONF_TIER],
-                    colour=user_input.get(CONF_COLOUR),
+                    # The selector hands back a string ("66"); Item/Chrome
+                    # want an int.
+                    colour=int(raw_colour) if raw_colour is not None else None,
                 ),
                 TierSet(),
             )

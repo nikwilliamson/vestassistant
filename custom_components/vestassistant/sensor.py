@@ -38,29 +38,33 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        # The displayed decision, not the raw scheduler decision: a card the
-        # board could not render (WriteOutcome.SKIPPED) must not be named
-        # here either, or the state and its attributes would disagree.
-        decision = self.coordinator.displayed_decision
-        if decision is None:
-            return {}
-        item = decision.item
+        # The displayed decision, not the raw scheduler decision, for card
+        # identity: a card the board could not render (WriteOutcome.SKIPPED)
+        # must not be named here either, or the state and its attributes
+        # would disagree. next_at/reason are different - they describe the
+        # live scheduler, not the wall, so a skipped or failed render must
+        # not leave them stuck reporting a wake time already in the past and
+        # a stale reason.
+        displayed = self.coordinator.displayed_decision
+        live = self.coordinator.decision
+        item = displayed.item if displayed else None
+        queue = [
+            {"id": i.id, "source": i.source, "tier": i.tier, "text": i.cards[0]}
+            for i in self.coordinator.collect(
+                self.coordinator.cursor.shown_at or dt_now()
+            )
+        ]
         return {
             "source": item.meta.get("source_name") if item else None,
             "source_id": item.source if item else None,
             "item_id": item.id if item else None,
             "tier": item.tier if item else None,
-            "card": decision.card_index + 1 if item else None,
+            "card": displayed.card_index + 1 if item else None,
             "cards": len(item.cards) if item else None,
             "since": self.coordinator.cursor.shown_at,
-            "next_at": decision.next_wake,
-            "reason": decision.reason,
-            "queue": [
-                {"id": i.id, "source": i.source, "tier": i.tier, "text": i.cards[0]}
-                for i in self.coordinator.collect(
-                    self.coordinator.cursor.shown_at or dt_now()
-                )
-            ],
+            "next_at": live.next_wake if live else None,
+            "reason": live.reason if live else "",
+            "queue": queue,
         }
 
 

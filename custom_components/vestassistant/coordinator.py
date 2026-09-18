@@ -92,6 +92,16 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         keep pointing at whatever is really on the wall rather than the card
         that failed to reach it.
         """
+        self._unrendered_text: str | None = None
+        """The text of the most recent SKIPPED render, if any.
+
+        ``cursor.last_rendered`` is deliberately left pointing at a SKIPPED
+        card (see ``WriteOutcome.SKIPPED``), so a later, non-advancing
+        re-selection of that same card reports ``write=False`` even though it
+        was never actually written. ``write=False`` normally means "the board
+        already shows this"; this field is how ``async_tick`` tells the two
+        cases apart before trusting that assumption.
+        """
         self.rotation_enabled = True
         self.paused_until: datetime | None = None
 
@@ -248,10 +258,21 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
                 wake_trigger = Trigger.DWELL
             elif outcome is WriteOutcome.WRITTEN:
                 self._displayed_decision = decision
-            # FAILED, DEFERRED and SKIPPED all leave the board showing
-            # whatever _displayed_decision already points at.
-        else:
-            # No write needed because the board already shows this.
+                self._unrendered_text = None
+            else:
+                # SKIPPED: nothing reached the board. last_rendered still
+                # advanced (see WriteOutcome.SKIPPED), so remember the text
+                # that did NOT make it, or a later write=False tick for this
+                # same card would be mistaken for it being on display.
+                self._unrendered_text = decision.text
+            # FAILED and DEFERRED leave the board showing whatever
+            # _displayed_decision already points at.
+        elif decision.text != self._unrendered_text:
+            # write=False usually means the board already shows this
+            # decision. The exception is the card we just SKIPPED: its
+            # last_rendered was left set without ever reaching the board, so
+            # a non-advancing re-selection of it must not be treated as
+            # displayed either.
             self._displayed_decision = decision
 
         self._schedule_wake(wake, wake_trigger)
