@@ -1,44 +1,75 @@
-# Target: bronze for 0.1, silver once reauth and offline recovery are proven
-# against a real board, gold when discovery and diagnostics land.
+# Audited against the published rule list, not from memory. Silver is blocked
+# on tests and on entities going unavailable when the board cannot be reached;
+# gold on diagnostics, discovery and a reconfigure flow for the entry itself.
 rules:
-  config-flow: done
-  test-before-configure: done
-  unique-config-entry: done
-  config-flow-test-coverage: todo
-  runtime-data: done
-  entity-unique-id: done
-  has-entity-name: done
+  # bronze
   action-setup: done
   appropriate-polling: done
-  brands: todo
+  brands: todo  # assets are ready in brand/; the PR has not been raised
   common-modules: done
+  config-flow-test-coverage: todo
+  config-flow: done
   dependency-transparency: done
   docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions.
   docs-high-level-description: done
   docs-installation-instructions: done
-  docs-removal-instructions: todo
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers.
   entity-event-setup: done
-  action-exceptions: done
-  test-coverage: todo
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
 
   # silver
+  action-exceptions: todo  # actions raise when no board is loaded, but pin
+                           # still logs and returns on an unencodable message
   config-entry-unloading: done
-  log-when-unavailable: done
-  entity-unavailable: todo
-  reauthentication-flow: done
-  parallel-updates: todo
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: todo  # entities hold the last known grid when the board
+                            # is unreachable rather than going unavailable
   integration-owner: done
-  docs-supported-devices: done
-  docs-troubleshooting: todo
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: todo  # core/ is covered; the Home Assistant-facing layer is not
 
   # gold
-  discovery: todo
-  diagnostics: todo
-  reconfiguration-flow: todo
   devices: done
+  diagnostics: todo
+  discovery: todo
+  discovery-update-info: todo
+  docs-data-update: todo
+  docs-examples: done
+  docs-known-limitations: todo
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: todo
+  dynamic-devices:
+    status: exempt
+    comment: One entry is one board; there is nothing to discover later.
+  entity-category: done
+  entity-device-class:
+    status: exempt
+    comment: No device class fits a split-flap message or an attention count.
+  entity-disabled-by-default: todo
   entity-translations: done
+  exception-translations: todo  # raised strings are not translation keys yet
   icon-translations: done
+  reconfiguration-flow: todo  # sources can be reconfigured; the entry cannot
   repair-issues: todo
+  stale-devices:
+    status: exempt
+    comment: One entry is one board; removing the entry removes the device.
 
   # platinum
   async-dependency: done

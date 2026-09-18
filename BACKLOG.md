@@ -30,6 +30,13 @@ Resolved: the dead `abort.reconfigure_successful` string has been dropped.
 Target is bronze for 0.1, silver once reauth and offline recovery are proven
 against a real board, gold when discovery and diagnostics land.
 
+Resolved in 0.3.1: `action-setup` (actions were registered in
+`async_setup_entry`, so an automation referencing them failed validation with
+no entry loaded, and they outlived the last board), `parallel-updates`, and
+`entity-category` on the two built-in card switches. `quality_scale.yaml` was
+audited against the published rule list - it was missing a dozen rules and
+claimed two it did not meet.
+
 Bronze blockers:
 
 - `config-flow-test-coverage`

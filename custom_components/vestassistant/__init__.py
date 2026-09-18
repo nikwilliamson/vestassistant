@@ -15,9 +15,14 @@ from homeassistant.core import (
     ServiceResponse,
     SupportsResponse,
 )
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    ServiceValidationError,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
@@ -122,6 +127,21 @@ def _build_transport(hass: HomeAssistant, entry: ConfigEntry):
     return LocalTransport(session, entry.data[CONF_HOST], entry.data[CONF_API_KEY])
 
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the actions once, before any board is configured.
+
+    Registering these from ``async_setup_entry`` meant an automation
+    referencing ``vestassistant.add_item`` failed validation whenever no entry
+    was loaded, and left the actions registered after the last board was
+    removed. They belong to the integration, not to a board.
+    """
+    _async_register_services(hass)
+    return True
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: VestassistantConfigEntry
 ) -> bool:
@@ -154,7 +174,6 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
-    _async_register_services(hass)
     return True
 
 
@@ -265,23 +284,26 @@ VALIDATE_SCHEMA = vol.Schema(
 
 
 def _coordinators(
-    hass: HomeAssistant, call: ServiceCall
+    hass: HomeAssistant, call: ServiceCall, *, required: bool = True
 ) -> list[VestassistantCoordinator]:
     entry_id = call.data.get("entry_id")
-    entries = hass.config_entries.async_entries(DOMAIN)
     out = []
-    for entry in entries:
+    for entry in hass.config_entries.async_entries(DOMAIN):
         if entry_id and entry.entry_id != entry_id:
             continue
         coordinator = getattr(entry, "runtime_data", None)
         if coordinator is not None:
             out.append(coordinator)
+    if not out and required:
+        # Reachable now that the actions exist before any entry does. Saying
+        # so beats doing nothing and reporting success.
+        raise ServiceValidationError(
+            "No Vestaboard is set up, or the one you targeted is not loaded."
+        )
     return out
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
-    if hass.services.has_service(DOMAIN, SERVICE_ADD_ITEM):
-        return
 
     async def _add_item(call: ServiceCall) -> None:
         expire = call.data.get(ATTR_EXPIRE_WHEN)
@@ -322,7 +344,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         Exposed as a service with a response so that content can be checked
         while it is being written, rather than discovered garbled on the wall.
         """
-        coordinators = _coordinators(hass, call)
+        coordinators = _coordinators(hass, call, required=False)
         geometry: Geometry
         if "rows" in call.data and "columns" in call.data:
             geometry = Geometry(rows=call.data["rows"], cols=call.data["columns"])

@@ -5,12 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_CLOCK, CONF_FORECAST, CONF_FORECAST_ENTITY
 from .coordinator import VestassistantConfigEntry
 from .entity import VestassistantEntity
+
+#: Every read and write goes through the one coordinator, which
+#: serialises them and enforces the board's own spacing, so there is
+#: nothing here for Home Assistant to throttle.
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -52,6 +58,7 @@ class _OptionSwitch(VestassistantEntity, SwitchEntity):
     entity, so the value reads the same wherever you look at it.
     """
 
+    _attr_entity_category = EntityCategory.CONFIG
     _option: str
 
     @property

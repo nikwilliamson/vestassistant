@@ -30,6 +30,12 @@ SWATCH = {
 }
 
 
+#: Every read and write goes through the one coordinator, which
+#: serialises them and enforces the board's own spacing, so there is
+#: nothing here for Home Assistant to throttle.
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: VestassistantConfigEntry,
