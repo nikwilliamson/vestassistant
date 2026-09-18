@@ -10,6 +10,8 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "custom_components" / "vestassistant"),
 )
 
+from vesta.chars import encode
+
 from core.chips import (
     BLUE,
     GREEN,
@@ -31,6 +33,11 @@ def codes(text: str, geometry):
     return result.grid[0]
 
 
+def cells(text: str) -> int:
+    """How many board cells a builder's output actually occupies."""
+    return len(encode(text))
+
+
 class TestPalette:
     def test_is_the_six_safe_hues(self):
         assert PALETTE == (63, 64, 65, 66, 67, 68)
@@ -48,7 +55,9 @@ class TestEscape:
 
 class TestRow:
     def test_pads_to_full_width(self):
-        assert len(codes(row([RED, BLUE], NOTE.cols), NOTE)) == NOTE.cols
+        output = row([RED, BLUE], NOTE.cols)
+        assert cells(output) == NOTE.cols
+        assert len(codes(output, NOTE)) == NOTE.cols
 
     def test_places_the_codes_in_order(self):
         assert codes(row([RED, BLUE], NOTE.cols), NOTE)[:2] == [63, 67]
@@ -57,7 +66,9 @@ class TestRow:
         assert codes(row([RED], NOTE.cols), NOTE)[1:] == [0] * (NOTE.cols - 1)
 
     def test_truncates_codes_beyond_the_width(self):
-        assert len(codes(row([RED] * 40, NOTE.cols), NOTE)) == NOTE.cols
+        output = row([RED] * 40, NOTE.cols)
+        assert cells(output) == NOTE.cols
+        assert len(codes(output, NOTE)) == NOTE.cols
 
 
 class TestBar:
@@ -87,7 +98,9 @@ class TestBar:
 
 class TestGradient:
     def test_fills_the_full_width(self):
-        assert len(codes(gradient([RED, BLUE], FLAGSHIP.cols), FLAGSHIP)) == 22
+        output = gradient([RED, BLUE], FLAGSHIP.cols)
+        assert cells(output) == FLAGSHIP.cols
+        assert len(codes(output, FLAGSHIP)) == 22
 
     def test_starts_and_ends_on_the_stops(self):
         result = codes(gradient([RED, BLUE], FLAGSHIP.cols), FLAGSHIP)
@@ -100,7 +113,11 @@ class TestGradient:
 
 class TestPattern:
     def test_covers_the_whole_board(self):
-        result = fit(pattern(7, FLAGSHIP), FLAGSHIP, valign="top")
+        output = pattern(7, FLAGSHIP)
+        lines = output.split('\n')
+        assert len(lines) == FLAGSHIP.rows
+        assert all(cells(line) == FLAGSHIP.cols for line in lines)
+        result = fit(output, FLAGSHIP, valign="top")
         assert result.error == ""
         assert len(result.grid) == FLAGSHIP.rows
         assert all(len(r) == FLAGSHIP.cols for r in result.grid)
