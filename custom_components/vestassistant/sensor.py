@@ -80,12 +80,17 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
         else:
             next_at = live.next_wake if live else None
             reason = live.reason if live else ""
+        if foreign:
+            source, since = "elsewhere", coordinator.foreign_since
+        else:
+            source = item.meta.get("source_name") if item else None
+            since = coordinator.cursor.shown_at
         return {
-            "source": "elsewhere" if foreign else (item.meta.get("source_name") if item else None),
+            "source": source,
             "source_id": item.source if item else None,
             "item_id": item.id if item else None,
             "tier": item.tier if item else None,
-            "since": coordinator.foreign_since if foreign else coordinator.cursor.shown_at,
+            "since": since,
             "next_at": next_at,
             "reason": reason,
             "board": coordinator.board_rows,
