@@ -251,6 +251,35 @@ def test_no_summary_below_threshold():
     assert d.item.id != SUMMARY_ID
 
 
+def test_the_same_job_twice_counts_once():
+    items = [
+        item("a", tier=TIER_TASK, text="UNLOAD DISHWASHER"),
+        item("b", tier=TIER_TASK, text="Unload  dishwasher."),
+        item("c", tier=TIER_TASK, text="UNLOAD DISHWASHER"),
+        item("d", tier=TIER_TASK, text="LAUNDRY"),
+    ]
+    d = run(items)
+    assert d.attention_count == 2
+    assert d.item.id != SUMMARY_ID
+
+
+def test_a_repeat_keeps_the_higher_tier():
+    items = [
+        item("task", tier=TIER_TASK, text="STOVE LEFT ON"),
+        item("crit", tier=TIER_CRITICAL, text="STOVE LEFT ON"),
+    ]
+    d = run(items)
+    assert d.item.id == "crit"
+    assert d.attention_count == 1
+
+
+def test_repeated_content_is_left_alone():
+    d = run([item("a", text="HELLO"), item("b", text="HELLO")])
+    assert d.attention_count == 0
+    d2 = run([item("a", text="HELLO"), item("b", text="HELLO")], state=d.state)
+    assert {d.item.id, d2.item.id} == {"a", "b"}
+
+
 def test_content_does_not_count_toward_attention():
     items = [item(f"j{n}") for n in range(5)]
     d = run(items)

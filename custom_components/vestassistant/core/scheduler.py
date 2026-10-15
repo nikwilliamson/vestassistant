@@ -71,6 +71,38 @@ def _order(items: Iterable[Item], tiers: TierSet) -> list[Item]:
     return sorted(items, key=lambda i: _rank_of(i, tiers))
 
 
+def _same_text(text: str) -> str:
+    """What two items have to share to be the same thing on the wall."""
+    return " ".join(text.upper().split()).rstrip(".!?")
+
+
+def _unique(items: Sequence[Item], tiers: TierSet) -> list[Item]:
+    """Collapse attention items that say the same thing into one.
+
+    A to-do list happily holds UNLOAD DISHWASHER three times over, typed by
+    people who each thought it was not there yet. That is one job: one card in
+    the rotation and one toward the count. The highest-ranked copy wins and the
+    earliest breaks a tie. Content is left alone - repeating a card there is
+    somebody's choice.
+    """
+    best: dict[str, Item] = {}
+    for item in items:
+        key = _same_text(item.text)
+        if not key or not tiers.get(item.tier).attention:
+            continue
+        held = best.get(key)
+        if held is None or tiers.get(item.tier).rank > tiers.get(held.tier).rank:
+            best[key] = item
+    keep = {id(i) for i in best.values()}
+    return [
+        i
+        for i in items
+        if id(i) in keep
+        or not tiers.get(i.tier).attention
+        or not _same_text(i.text)
+    ]
+
+
 def _next_key(keys: Sequence[str], current: str | None) -> tuple[str, bool]:
     """Return the key after ``current``, and whether the cursor wrapped.
 
@@ -137,8 +169,8 @@ def decide(
     tiers = config.tiers
     quiet = in_quiet_hours(now, config.quiet_start, config.quiet_end)
 
-    # 1. Drop anything that has aged out.
-    live = [i for i in items if not i.is_expired(now)]
+    # 1. Drop anything that has aged out, and fold repeats of the same job.
+    live = _unique([i for i in items if not i.is_expired(now)], tiers)
 
     # 2. Exclusivity. The highest-ranked active tier that claims the board
     #    suppresses everything below it - a hazard takes the board, a chore
