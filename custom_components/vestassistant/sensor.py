@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .coordinator import VestassistantConfigEntry, VestassistantCoordinator
 from .entity import VestassistantEntity
@@ -30,13 +31,17 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
 
     # The queue is every message text on every state change; the recorder
     # does not need a copy of it each time the board flips.
-    _unrecorded_attributes = frozenset({"queue"})
+    _unrecorded_attributes = frozenset({"queue", "board"})
 
     def __init__(self, coordinator: VestassistantCoordinator) -> None:
         super().__init__(coordinator, "current_item")
 
     @property
     def native_value(self) -> str | None:
+        # Somebody else's message is up: name what is on the wall, not the
+        # last card of ours it covered.
+        if self.coordinator.foreign_since is not None:
+            return " ".join(self.coordinator.board_text.split())[:255] or None
         displayed = self.coordinator.displayed_decision
         if displayed is None or displayed.text is None:
             return None
@@ -56,21 +61,34 @@ class CurrentItemSensor(VestassistantEntity, SensorEntity):
         # live scheduler, not the wall, so a skipped or failed render must
         # not leave them stuck reporting a wake time already in the past and
         # a stale reason.
-        displayed = self.coordinator.displayed_decision
-        live = self.coordinator.decision
+        coordinator = self.coordinator
+        foreign = coordinator.foreign_since is not None
+        displayed = None if foreign else coordinator.displayed_decision
+        live = coordinator.decision
         item = displayed.item if displayed else None
         queue = [
             {"id": i.id, "source": i.source, "tier": i.tier, "text": i.text}
-            for i in self.coordinator.queue
+            for i in coordinator.queue
         ]
+        # While a hold is running the scheduler does not tick, so its last
+        # decision would report a wake time long gone; the hold's end is the
+        # real next change.
+        held = coordinator.paused_until
+        if held is not None and held > dt_util.now():
+            next_at = held
+            reason = "someone else posted; yielding" if foreign else "pinned"
+        else:
+            next_at = live.next_wake if live else None
+            reason = live.reason if live else ""
         return {
-            "source": item.meta.get("source_name") if item else None,
+            "source": "elsewhere" if foreign else (item.meta.get("source_name") if item else None),
             "source_id": item.source if item else None,
             "item_id": item.id if item else None,
             "tier": item.tier if item else None,
-            "since": self.coordinator.cursor.shown_at,
-            "next_at": live.next_wake if live else None,
-            "reason": live.reason if live else "",
+            "since": coordinator.foreign_since if foreign else coordinator.cursor.shown_at,
+            "next_at": next_at,
+            "reason": reason,
+            "board": coordinator.board_rows,
             "queue": queue,
         }
 

@@ -111,7 +111,7 @@ class FitResult:
 
     @property
     def preview(self) -> str:
-        return "\n".join(_decode_row(row) for row in self.grid)
+        return "\n".join(decode_row(row) for row in self.grid)
 
 
 def _wrap(codes: list[int], cols: int) -> list[list[int]]:
@@ -252,7 +252,7 @@ def _fit_once(
     overflow = ""
     if rows_needed > geometry.rows:
         dropped = lines[geometry.rows :]
-        overflow = " ".join(_decode_row(r).strip() for r in dropped).strip()
+        overflow = " ".join(decode_row(r).strip() for r in dropped).strip()
         lines = lines[: geometry.rows]
 
     body = [_align(row, geometry.cols, align) for row in lines]
@@ -287,7 +287,8 @@ def blank(geometry: Geometry) -> list[list[int]]:
 _REVERSE = {v: k for k, v in CHARMAP.items()}
 
 
-def _decode_row(row: list[int]) -> str:
+def decode_row(row: list[int]) -> str:
+    """One board row as text, colour chips as ``{63}``, padding kept."""
     out = []
     for code in row:
         if 0 <= code < len(PRINTABLE):
@@ -299,7 +300,7 @@ def _decode_row(row: list[int]) -> str:
 
 def decode(grid: list[list[int]]) -> str:
     """Turn a character grid back into readable text."""
-    return "\n".join(_decode_row(row).rstrip() for row in grid).strip()
+    return "\n".join(decode_row(row).rstrip() for row in grid).strip()
 
 
 def geometry_from_grid(grid: list[list[int]]) -> Geometry:

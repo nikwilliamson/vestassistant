@@ -8,6 +8,8 @@ from core.layout import (
     Band,
     Geometry,
     clean,
+    decode,
+    decode_row,
     fit,
     geometry_from_grid,
 )
@@ -249,3 +251,13 @@ class TestClean:
     def test_only_a_bad_code_is_still_an_error(self):
         assert fit("HELLO*WORLD", NOTE).error == ""
         assert fit("{99}", NOTE).error != ""
+
+
+def test_decode_row_keeps_position_and_colour():
+    # The sensor's "board" attribute draws each flap where it is, so a row
+    # must come back at full width, padding and colour chips intact.
+    r = fit("{63}HI", NOTE)
+    row = decode_row(r.grid[1])
+    assert len(row.replace("{63}", "#")) == 15
+    assert "{63}HI" in row
+    assert decode(r.grid) == "{63}HI"

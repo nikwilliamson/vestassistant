@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import POLL_INTERVAL, STORAGE_KEY, STORAGE_VERSION
-from .core.layout import Geometry, blank, decode, fit
+from .core.layout import Geometry, blank, decode, decode_row, fit
 from .core.models import (
     CursorState,
     Decision,
@@ -117,6 +117,11 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         message, or a human posting from the Vestaboard app."""
         self.typed_message: str = ""
         """The last message typed straight at the board, for the text entity."""
+        self.foreign_since: datetime | None = None
+        """When somebody else last changed the board, while their message is
+        still up. Cleared by our next write. While set, the board shows
+        something no decision of ours describes, so the sensor reports the
+        wall itself rather than the last card we put there."""
 
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}"
@@ -198,6 +203,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
         ):
             _LOGGER.debug("board changed underneath us; yielding")
             self._last_written_grid = grid
+            self.foreign_since = dt_util.now()
             await self.async_hold(self.scheduler_config.foreign_write_grace)
 
         return grid
@@ -376,6 +382,7 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
             return False
         self._last_written_grid = grid
         self._last_write_at = now
+        self.foreign_since = None
         # Hand the grid to the entities now rather than when the next poll
         # reads it back, so the preview image and board text do not lag the
         # wall by up to a minute.
@@ -533,6 +540,12 @@ class VestassistantCoordinator(DataUpdateCoordinator[list[list[int]]]):
     @property
     def board_text(self) -> str:
         return decode(self.data) if self.data else ""
+
+    @property
+    def board_rows(self) -> list[str]:
+        """The board read back row by row, unstripped, so a card can draw
+        every flap where it really is. Colour chips appear as ``{63}``."""
+        return [decode_row(row) for row in self.data] if self.data else []
 
 
 def _cursor_to_dict(cursor: CursorState) -> dict[str, Any]:
